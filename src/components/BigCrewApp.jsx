@@ -18,14 +18,14 @@ async function save(d) {
 
 // ─── THEME ───────────────────────────────────────────────────────────────────
 const C = {
-  bg:"#080808", s1:"#101010", s2:"#161616", s3:"#1e1e1e",
-  border:"#222", borderHi:"#333",
-  gold:"#E8C84A", goldDim:"#7a6418", goldBg:"#1a1500",
-  green:"#3ECF8E", greenBg:"#0d1f18",
-  red:"#FF5A5A", redBg:"#1f0d0d",
-  blue:"#4D9FFF", blueBg:"#0d1829",
-  purple:"#A78BFA", purpleBg:"#160d29",
-  text:"#F2EFE8", muted:"#777", dim:"#444",
+  bg:"#ffffff", s1:"#fafafa", s2:"#f3f3f3", s3:"#e9e9e9",
+  border:"#e4e4e4", borderHi:"#d0d0d0",
+  gold:"#080808", goldDim:"#888", goldBg:"#f0f0f0",
+  green:"#0a8f5b", greenBg:"#e7f7ef",
+  red:"#d83a3a", redBg:"#fdeaea",
+  blue:"#1f6fd6", blueBg:"#e9f1fd",
+  purple:"#6d4fd0", purpleBg:"#f0ebfb",
+  text:"#0a0a0a", muted:"#666", dim:"#9a9a9a",
   font:"'DM Mono','Courier New',monospace",
   head:"'Bebas Neue',sans-serif",
 };
@@ -950,10 +950,10 @@ const btn = (v="gold",full=false) => ({
   padding:"10px 16px",borderRadius:"8px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.1em",
   textTransform:"uppercase",cursor:"pointer",fontFamily:C.font,border:"none",width:full?"100%":"auto",
   background: v==="gold"?C.gold:v==="green"?C.green:v==="red"?C.red:v==="blue"?C.blue:v==="purple"?C.purple:C.s3,
-  color: v==="ghost"?C.muted:"#000",
+  color: v==="ghost"?C.muted:v==="default"?C.text:"#fff",
 });
 const badge = (color,bg) => ({background:bg,color,fontSize:"9px",letterSpacing:"0.12em",fontWeight:"700",textTransform:"uppercase",padding:"2px 7px",borderRadius:"4px",display:"inline-block"});
-const tabBtn = (active) => ({flex:1,padding:"9px 6px",textAlign:"center",fontSize:"10px",fontWeight:"700",letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer",background:active?C.gold:"transparent",color:active?"#000":C.muted,border:"none",fontFamily:C.font,borderRadius:"5px",transition:"all 0.15s"});
+const tabBtn = (active) => ({flex:1,padding:"9px 6px",textAlign:"center",fontSize:"10px",fontWeight:"700",letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer",background:active?C.gold:"transparent",color:active?"#fff":C.muted,border:"none",fontFamily:C.font,borderRadius:"5px",transition:"all 0.15s"});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // LOGO SVG – BigCrew circle mark (replicated from uploaded image)
@@ -1597,7 +1597,7 @@ function Spinner() {
   return (
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"16px",fontFamily:C.font}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap');@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <Logo size={56}/>
+      <Logo size={56} variant="dark"/>
       <div style={{width:"32px",height:"32px",border:`3px solid ${C.gold}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
       <div style={{color:C.muted,fontSize:"11px",letterSpacing:"0.2em"}}>LOADING BIGCREW NYC...</div>
     </div>
@@ -1654,7 +1654,7 @@ function LoginScreen({state, setCurrentUser, setScreen}) {
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",padding:"32px 20px 60px"}}>
       <style>{GS}</style>
       <div style={{textAlign:"center",marginBottom:"32px"}}>
-        <Logo size={72}/>
+        <Logo size={72} variant="dark"/>
         <div style={{fontFamily:C.head,fontSize:"32px",letterSpacing:"0.12em",color:C.gold,marginTop:"12px",lineHeight:1}}>BIGCREW NYC</div>
         <div style={{fontSize:"10px",color:C.muted,letterSpacing:"0.2em",marginTop:"4px"}}>CREW MANAGEMENT SYSTEM</div>
       </div>
@@ -1680,7 +1680,7 @@ function LoginScreen({state, setCurrentUser, setScreen}) {
           </div>
 
           {/* Google */}
-          <div onClick={()=>setMode("google")} style={{...card({padding:"14px"}),cursor:"pointer",display:"flex",alignItems:"center",gap:"12px",background:"#fff",border:`1px solid #fff`}}>
+          <div onClick={()=>setMode("google")} style={{...card({padding:"14px"}),cursor:"pointer",display:"flex",alignItems:"center",gap:"12px",background:"#fff",border:`1px solid ${C.borderHi}`}}>
             <svg width="22" height="22" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.7 4.7-6.2 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34.5 6.4 29.5 4.5 24 4.5 13.2 4.5 4.5 13.2 4.5 24S13.2 43.5 24 43.5c10.9 0 19.5-7.9 19.5-19.5 0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8c1.8-4.4 6.1-7.5 11.1-7.5 3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34.5 6.4 29.5 4.5 24 4.5c-7.7 0-14.4 4.4-17.7 10.7z"/><path fill="#4CAF50" d="M24 43.5c5.4 0 10.3-2.1 14-5.4l-6.5-5.5c-1.9 1.4-4.5 2.4-7.5 2.4-5.1 0-9.4-3.3-11-7.9l-6.6 5.1C9.5 39 16.2 43.5 24 43.5z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4 5.5l6.5 5.5c4.6-4.3 7.7-10.6 7.7-18 0-1.3-.1-2.4-.4-3.5z"/></svg>
             <div style={{flex:1,color:"#1a1a1a"}}>
               <div style={{fontSize:"13px",fontWeight:"700"}}>Sign in with Google</div>
@@ -1945,7 +1945,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
       <div style={{background:C.s1,borderBottom:`2px solid ${C.gold}`,padding:"16px 16px 12px",position:"sticky",top:0,zIndex:50}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-            <Logo size={38}/>
+            <Logo size={38} variant="dark"/>
             <div>
               <div style={{fontFamily:C.head,fontSize:"22px",letterSpacing:"0.1em",color:C.gold,lineHeight:1}}>BIGCREW NYC</div>
               <div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.16em"}}>
@@ -3898,7 +3898,7 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
       <div style={{background:C.s1,borderBottom:`2px solid ${C.gold}`,padding:"14px",position:"sticky",top:0,zIndex:50}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-            <Logo size={32}/>
+            <Logo size={32} variant="dark"/>
             <div>
               <div style={{fontFamily:C.head,fontSize:"18px",letterSpacing:"0.08em",color:C.gold,lineHeight:1}}>ADMIN PANEL</div>
               <div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.14em"}}>{activeShift.client} · {activeShift.date}</div>
@@ -5889,13 +5889,13 @@ function GoogleCalSetupGuide({onClose}) {
 const GS = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap');
   * { box-sizing: border-box; }
-  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #080808; } ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius:2px; }
+  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #f0f0f0; } ::-webkit-scrollbar-thumb { background: #c4c4c4; border-radius:2px; }
   @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
-  input::placeholder, textarea::placeholder { color: #444; }
+  input::placeholder, textarea::placeholder { color: #aaa; }
   a { color: inherit; }
-  select option { background: #161616; color: #F2EFE8; }
+  select option { background: #ffffff; color: #0a0a0a; }
   .bcn-body { padding: 14px 14px 100px; }
   .bcn-row { display: block; }
   .bcn-row-side { display: block; }
