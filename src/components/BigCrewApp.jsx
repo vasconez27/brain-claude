@@ -943,36 +943,23 @@ const INIT = {
 };
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
-const card = (extra={}) => ({background:C.s1,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px",...extra});
-const lbl = {fontSize:"9px",letterSpacing:"0.2em",color:C.dim,textTransform:"uppercase",marginBottom:"4px",display:"block"};
-const inp = {background:C.s2,border:`1px solid ${C.border}`,borderRadius:"7px",padding:"10px 12px",fontSize:"13px",color:C.text,fontFamily:C.font,width:"100%",outline:"none",boxSizing:"border-box"};
+const card = (extra={}) => ({background:C.s1,border:`2px solid ${C.border}`,borderRadius:"10px",padding:"14px",...extra});
+const lbl = {fontSize:"10px",letterSpacing:"0.2em",color:C.dim,textTransform:"uppercase",marginBottom:"4px",display:"block",fontWeight:"700"};
+const inp = {background:"#fff",border:`2px solid ${C.borderHi}`,borderRadius:"7px",padding:"10px 12px",fontSize:"14px",color:C.text,fontFamily:C.font,width:"100%",outline:"none",boxSizing:"border-box",fontWeight:"600"};
 const btn = (v="gold",full=false) => ({
-  padding:"10px 16px",borderRadius:"8px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.1em",
+  padding:"11px 18px",borderRadius:"8px",fontSize:"11px",fontWeight:"800",letterSpacing:"0.12em",
   textTransform:"uppercase",cursor:"pointer",fontFamily:C.font,border:"none",width:full?"100%":"auto",
   background: v==="gold"?C.gold:v==="green"?C.green:v==="red"?C.red:v==="blue"?C.blue:v==="purple"?C.purple:C.s3,
   color: v==="ghost"?C.muted:v==="default"?C.text:"#fff",
 });
-const badge = (color,bg) => ({background:bg,color,fontSize:"9px",letterSpacing:"0.12em",fontWeight:"700",textTransform:"uppercase",padding:"2px 7px",borderRadius:"4px",display:"inline-block"});
-const tabBtn = (active) => ({flex:1,padding:"9px 6px",textAlign:"center",fontSize:"10px",fontWeight:"700",letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer",background:active?C.gold:"transparent",color:active?"#fff":C.muted,border:"none",fontFamily:C.font,borderRadius:"5px",transition:"all 0.15s"});
+const badge = (color,bg) => ({background:bg,color,fontSize:"9px",letterSpacing:"0.12em",fontWeight:"800",textTransform:"uppercase",padding:"3px 8px",borderRadius:"4px",display:"inline-block",border:`1px solid ${color}22`});
+const tabBtn = (active) => ({flex:1,padding:"10px 6px",textAlign:"center",fontSize:"10px",fontWeight:"800",letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer",background:active?C.gold:"transparent",color:active?"#fff":C.muted,border:"none",fontFamily:C.font,borderRadius:"5px",transition:"all 0.15s"});
 
-// ══════════════════════════════════════════════════════════════════════════════
-// LOGO SVG – BigCrew circle mark (replicated from uploaded image)
-// ══════════════════════════════════════════════════════════════════════════════
-// BiG CREW circle mark. variant="light" = white outline + white text (for dark
-// backgrounds, matches bigcrewny.com header). variant="dark" = white disc + black
-// text (badge on photos / light surfaces).
-function Logo({size=40, variant="light"}) {
-  const ink = variant === "dark" ? "black" : "white";
+// ── LOGO — real PNG mark ──────────────────────────────────────────────────────
+function Logo({size=40}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-      {variant === "dark"
-        ? <circle cx="50" cy="50" r="47" fill="white" stroke="black" strokeWidth="3.5"/>
-        : <circle cx="50" cy="50" r="47" fill="none" stroke="white" strokeWidth="3.5"/>}
-      <text x="50" y="46" textAnchor="middle" fontFamily="'Bebas Neue','Arial Black',Impact,sans-serif" fontWeight="900" fontSize="33" fill={ink} letterSpacing="0">BiG</text>
-      <line x1="20" y1="51" x2="80" y2="51" stroke={ink} strokeWidth="1.5"/>
-      <line x1="20" y1="53.5" x2="80" y2="53.5" stroke={ink} strokeWidth="0.8"/>
-      <text x="50" y="76" textAnchor="middle" fontFamily="'Bebas Neue','Arial Black',Impact,sans-serif" fontWeight="900" fontSize="23" fill={ink} letterSpacing="3">CREW</text>
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src="/bigcrewlogo.png" alt="BigCrew" width={size} height={size} style={{objectFit:"contain",display:"block"}}/>
   );
 }
 
@@ -1597,7 +1584,7 @@ function Spinner() {
   return (
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"16px",fontFamily:C.font}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap');@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <Logo size={56} variant="dark"/>
+      <Logo size={56}/>
       <div style={{width:"32px",height:"32px",border:`3px solid ${C.gold}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
       <div style={{color:C.muted,fontSize:"11px",letterSpacing:"0.2em"}}>LOADING BIGCREW NYC...</div>
     </div>
@@ -1654,7 +1641,7 @@ function LoginScreen({state, setCurrentUser, setScreen}) {
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text,display:"flex",flexDirection:"column",alignItems:"center",padding:"32px 20px 60px"}}>
       <style>{GS}</style>
       <div style={{textAlign:"center",marginBottom:"32px"}}>
-        <Logo size={72} variant="dark"/>
+        <Logo size={72}/>
         <div style={{fontFamily:C.head,fontSize:"32px",letterSpacing:"0.12em",color:C.gold,marginTop:"12px",lineHeight:1}}>BIGCREW NYC</div>
         <div style={{fontSize:"10px",color:C.muted,letterSpacing:"0.2em",marginTop:"4px"}}>CREW MANAGEMENT SYSTEM</div>
       </div>
@@ -1945,7 +1932,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
       <div style={{background:C.s1,borderBottom:`2px solid ${C.gold}`,padding:"16px 16px 12px",position:"sticky",top:0,zIndex:50}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-            <Logo size={38} variant="dark"/>
+            <Logo size={38}/>
             <div>
               <div style={{fontFamily:C.head,fontSize:"22px",letterSpacing:"0.1em",color:C.gold,lineHeight:1}}>BIGCREW NYC</div>
               <div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.16em"}}>
@@ -3898,7 +3885,7 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
       <div style={{background:C.s1,borderBottom:`2px solid ${C.gold}`,padding:"14px",position:"sticky",top:0,zIndex:50}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-            <Logo size={32} variant="dark"/>
+            <Logo size={32}/>
             <div>
               <div style={{fontFamily:C.head,fontSize:"18px",letterSpacing:"0.08em",color:C.gold,lineHeight:1}}>ADMIN PANEL</div>
               <div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.14em"}}>{activeShift.client} · {activeShift.date}</div>
@@ -5889,13 +5876,16 @@ function GoogleCalSetupGuide({onClose}) {
 const GS = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap');
   * { box-sizing: border-box; }
-  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #f0f0f0; } ::-webkit-scrollbar-thumb { background: #c4c4c4; border-radius:2px; }
+  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #f0f0f0; } ::-webkit-scrollbar-thumb { background: #aaa; border-radius:2px; }
   @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
-  input::placeholder, textarea::placeholder { color: #aaa; }
+  input, select, textarea { font-weight: 600; }
+  input::placeholder, textarea::placeholder { color: #aaa; font-weight: 400; }
   a { color: inherit; }
   select option { background: #ffffff; color: #0a0a0a; }
+  h1,h2,h3 { font-weight: 900; letter-spacing: -0.01em; }
+  strong { font-weight: 900; }
   .bcn-body { padding: 14px 14px 100px; }
   .bcn-row { display: block; }
   .bcn-row-side { display: block; }
