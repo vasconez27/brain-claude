@@ -958,13 +958,20 @@ const tabBtn = (active) => ({flex:1,padding:"9px 6px",textAlign:"center",fontSiz
 // ══════════════════════════════════════════════════════════════════════════════
 // LOGO SVG – BigCrew circle mark (replicated from uploaded image)
 // ══════════════════════════════════════════════════════════════════════════════
-function Logo({size=40}) {
+// BiG CREW circle mark. variant="light" = white outline + white text (for dark
+// backgrounds, matches bigcrewny.com header). variant="dark" = white disc + black
+// text (badge on photos / light surfaces).
+function Logo({size=40, variant="light"}) {
+  const ink = variant === "dark" ? "black" : "white";
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-      <circle cx="50" cy="50" r="48" fill="white" stroke="black" strokeWidth="4"/>
-      <text x="50" y="42" textAnchor="middle" fontFamily="'Arial Black','Arial',sans-serif" fontWeight="900" fontSize="30" fill="black" letterSpacing="-1">BiG</text>
-      <line x1="18" y1="52" x2="82" y2="52" stroke="black" strokeWidth="2.5"/>
-      <text x="50" y="72" textAnchor="middle" fontFamily="'Arial Black','Arial',sans-serif" fontWeight="900" fontSize="22" fill="black" letterSpacing="1">CREW</text>
+      {variant === "dark"
+        ? <circle cx="50" cy="50" r="47" fill="white" stroke="black" strokeWidth="3.5"/>
+        : <circle cx="50" cy="50" r="47" fill="none" stroke="white" strokeWidth="3.5"/>}
+      <text x="50" y="46" textAnchor="middle" fontFamily="'Bebas Neue','Arial Black',Impact,sans-serif" fontWeight="900" fontSize="33" fill={ink} letterSpacing="0">BiG</text>
+      <line x1="20" y1="51" x2="80" y2="51" stroke={ink} strokeWidth="1.5"/>
+      <line x1="20" y1="53.5" x2="80" y2="53.5" stroke={ink} strokeWidth="0.8"/>
+      <text x="50" y="76" textAnchor="middle" fontFamily="'Bebas Neue','Arial Black',Impact,sans-serif" fontWeight="900" fontSize="23" fill={ink} letterSpacing="3">CREW</text>
     </svg>
   );
 }
