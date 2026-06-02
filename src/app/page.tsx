@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 
 export default function Home() {
   return (
@@ -25,12 +24,12 @@ export default function Home() {
         className="min-h-screen flex flex-col items-center justify-center px-4"
         style={{ background: "#ffffff" }}
       >
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src="/bigcrewlogo.png"
           alt="BigCrew NY"
           width={280}
           height={280}
-          priority
           style={{ objectFit: "contain" }}
         />
 
