@@ -13,6 +13,12 @@ export default function Home() {
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
+            href="/bigcrew"
+            className="px-8 py-3 rounded-lg bg-yellow-400 text-gray-900 font-semibold hover:bg-yellow-300 transition-colors"
+          >
+            Open BigCrew NYC
+          </Link>
+          <Link
             href="/login"
             className="px-8 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
           >
