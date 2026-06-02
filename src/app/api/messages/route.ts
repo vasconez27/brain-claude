@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     select: { id: true, phone: true },
   });
 
-  const phones = recipients.filter((r) => r.phone).map((r) => r.phone!);
+  const phones = recipients.filter((r: { id: string; phone: string | null }) => r.phone).map((r: { id: string; phone: string | null }) => r.phone!);
   let twilioResults: { phone: string; sid?: string; error?: string }[] = [];
 
   if (phones.length > 0 && process.env.TWILIO_ACCOUNT_SID) {
