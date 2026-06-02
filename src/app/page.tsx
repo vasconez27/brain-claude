@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export default function Home() {
   return (
@@ -24,39 +25,15 @@ export default function Home() {
         className="min-h-screen flex flex-col items-center justify-center px-4"
         style={{ background: "#ffffff" }}
       >
-        {/* BiG CREW circle mark — black on white */}
-        <svg
-          viewBox="0 0 400 400"
-          xmlns="http://www.w3.org/2000/svg"
-          style={{ width: 260, height: 260 }}
-        >
-          <circle cx="200" cy="200" r="184" fill="none" stroke="#080808" strokeWidth="13" />
-          <text
-            x="200" y="186"
-            textAnchor="middle"
-            fontFamily="'Bebas Neue','Arial Black',Impact,sans-serif"
-            fontSize="138"
-            fontWeight="900"
-            fill="#080808"
-            letterSpacing="0"
-          >
-            BiG
-          </text>
-          <line x1="62" y1="206" x2="338" y2="206" stroke="#080808" strokeWidth="6" />
-          <text
-            x="200" y="312"
-            textAnchor="middle"
-            fontFamily="'Bebas Neue','Arial Black',Impact,sans-serif"
-            fontSize="92"
-            fontWeight="900"
-            fill="#080808"
-            letterSpacing="7"
-          >
-            CREW
-          </text>
-        </svg>
+        <Image
+          src="/bigcrewlogo.png"
+          alt="BigCrew NY"
+          width={280}
+          height={280}
+          priority
+          style={{ objectFit: "contain" }}
+        />
 
-        {/* Tagline */}
         <p
           style={{
             fontFamily: "'Bebas Neue','Arial Black',sans-serif",
