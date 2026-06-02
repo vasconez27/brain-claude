@@ -5,54 +5,52 @@ export default function Home() {
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
-        .bc-font { font-family: 'Bebas Neue', 'Arial Black', Impact, sans-serif; }
         .bc-enter {
           display: inline-block;
-          border: 2px solid #fff;
-          color: #fff;
-          letter-spacing: 0.25em;
-          padding: 14px 48px;
-          font-size: 14px;
+          border: 2px solid #080808;
+          color: #080808;
+          letter-spacing: 0.28em;
+          padding: 15px 56px;
+          font-size: 15px;
           font-family: 'Bebas Neue', 'Arial Black', sans-serif;
           font-weight: 700;
           text-decoration: none;
           transition: background 0.2s, color 0.2s;
-          margin-top: 48px;
+          margin-top: 44px;
         }
-        .bc-enter:hover { background: #fff; color: #080808; }
+        .bc-enter:hover { background: #080808; color: #fff; }
       `}</style>
       <main
-        className="min-h-screen flex flex-col items-center justify-center"
-        style={{ background: "#080808" }}
+        className="min-h-screen flex flex-col items-center justify-center px-4"
+        style={{ background: "#ffffff" }}
       >
-        {/* Circle Logo SVG */}
+        {/* BiG CREW circle mark — black on white */}
         <svg
           viewBox="0 0 400 400"
           xmlns="http://www.w3.org/2000/svg"
-          style={{ width: 220, height: 220, marginBottom: 8 }}
+          style={{ width: 260, height: 260 }}
         >
-          <circle cx="200" cy="200" r="182" fill="none" stroke="white" strokeWidth="11" />
+          <circle cx="200" cy="200" r="184" fill="none" stroke="#080808" strokeWidth="13" />
           <text
-            x="200" y="178"
+            x="200" y="186"
             textAnchor="middle"
             fontFamily="'Bebas Neue','Arial Black',Impact,sans-serif"
-            fontSize="118"
+            fontSize="138"
             fontWeight="900"
-            fill="white"
-            letterSpacing="2"
+            fill="#080808"
+            letterSpacing="0"
           >
             BiG
           </text>
-          <line x1="58" y1="198" x2="342" y2="198" stroke="white" strokeWidth="3" />
-          <line x1="58" y1="206" x2="342" y2="206" stroke="white" strokeWidth="1.5" />
+          <line x1="62" y1="206" x2="338" y2="206" stroke="#080808" strokeWidth="6" />
           <text
-            x="200" y="296"
+            x="200" y="312"
             textAnchor="middle"
             fontFamily="'Bebas Neue','Arial Black',Impact,sans-serif"
-            fontSize="82"
+            fontSize="92"
             fontWeight="900"
-            fill="white"
-            letterSpacing="6"
+            fill="#080808"
+            letterSpacing="7"
           >
             CREW
           </text>
@@ -60,12 +58,12 @@ export default function Home() {
 
         {/* Tagline */}
         <p
-          className="bc-font"
           style={{
-            color: "#fff",
-            fontSize: "22px",
-            letterSpacing: "0.12em",
-            marginTop: "24px",
+            fontFamily: "'Bebas Neue','Arial Black',sans-serif",
+            color: "#080808",
+            fontSize: "26px",
+            letterSpacing: "0.1em",
+            marginTop: "28px",
             textAlign: "center",
           }}
         >
@@ -74,10 +72,10 @@ export default function Home() {
 
         <p
           style={{
-            color: "#666",
+            color: "#888",
             fontSize: "10px",
-            letterSpacing: "0.3em",
-            marginTop: "8px",
+            letterSpacing: "0.32em",
+            marginTop: "10px",
             textTransform: "uppercase",
           }}
         >
