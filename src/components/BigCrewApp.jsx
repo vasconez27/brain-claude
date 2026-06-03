@@ -17,18 +17,39 @@ async function save(d) {
 }
 
 // ─── THEME ───────────────────────────────────────────────────────────────────
+// Colors flow through CSS variables (set on <html> by applyTheme) so the whole
+// app can switch between light and dark at runtime.
 const C = {
-  bg:"#ffffff", s1:"#fafafa", s2:"#f3f3f3", s3:"#e9e9e9",
-  border:"#e4e4e4", borderHi:"#d0d0d0",
-  gold:"#080808", goldDim:"#888", goldBg:"#f0f0f0",
-  green:"#0a8f5b", greenBg:"#e7f7ef",
-  red:"#d83a3a", redBg:"#fdeaea",
-  blue:"#1f6fd6", blueBg:"#e9f1fd",
-  purple:"#6d4fd0", purpleBg:"#f0ebfb",
-  text:"#0a0a0a", muted:"#666", dim:"#9a9a9a",
+  bg:"var(--bc-bg)", s1:"var(--bc-s1)", s2:"var(--bc-s2)", s3:"var(--bc-s3)",
+  border:"var(--bc-border)", borderHi:"var(--bc-borderHi)",
+  gold:"var(--bc-gold)", goldDim:"var(--bc-goldDim)", goldBg:"var(--bc-goldBg)",
+  green:"var(--bc-green)", greenBg:"var(--bc-greenBg)",
+  red:"var(--bc-red)", redBg:"var(--bc-redBg)",
+  blue:"var(--bc-blue)", blueBg:"var(--bc-blueBg)",
+  purple:"var(--bc-purple)", purpleBg:"var(--bc-purpleBg)",
+  text:"var(--bc-text)", muted:"var(--bc-muted)", dim:"var(--bc-dim)",
   font:"'DM Mono','Courier New',monospace",
   head:"'Bebas Neue',sans-serif",
 };
+
+const THEMES = {
+  light: { bg:"#ffffff", s1:"#fafafa", s2:"#f3f3f3", s3:"#e9e9e9", border:"#e4e4e4", borderHi:"#d0d0d0",
+    gold:"#080808", goldDim:"#888888", goldBg:"#f0f0f0", green:"#0a8f5b", greenBg:"#e7f7ef",
+    red:"#d83a3a", redBg:"#fdeaea", blue:"#1f6fd6", blueBg:"#e9f1fd", purple:"#6d4fd0", purpleBg:"#f0ebfb",
+    text:"#0a0a0a", muted:"#666666", dim:"#9a9a9a", inpbg:"#ffffff", onaccent:"#ffffff", logofilter:"none" },
+  dark:  { bg:"#0c0c0d", s1:"#151517", s2:"#1d1d20", s3:"#27272b", border:"#2c2c30", borderHi:"#3c3c42",
+    gold:"#f2f2f2", goldDim:"#888888", goldBg:"#1e1e22", green:"#34d399", greenBg:"#0f2a20",
+    red:"#f87171", redBg:"#2a1212", blue:"#60a5fa", blueBg:"#11243a", purple:"#a78bfa", purpleBg:"#1f1733",
+    text:"#ededed", muted:"#9a9a9a", dim:"#6a6a6a", inpbg:"#1a1a1d", onaccent:"#0a0a0a", logofilter:"invert(1)" },
+};
+
+function applyTheme(name) {
+  if (typeof document === "undefined") return;
+  const t = THEMES[name] || THEMES.light;
+  const root = document.documentElement;
+  Object.entries(t).forEach(([k, v]) => root.style.setProperty("--bc-" + k, v));
+  root.dataset.bcTheme = name;
+}
 
 const uid = () => Math.random().toString(36).slice(2,9);
 const now = () => new Date().toISOString();
@@ -945,21 +966,21 @@ const INIT = {
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const card = (extra={}) => ({background:C.s1,border:`2px solid ${C.border}`,borderRadius:"10px",padding:"14px",...extra});
 const lbl = {fontSize:"10px",letterSpacing:"0.2em",color:C.dim,textTransform:"uppercase",marginBottom:"4px",display:"block",fontWeight:"700"};
-const inp = {background:"#fff",border:`2px solid ${C.borderHi}`,borderRadius:"7px",padding:"10px 12px",fontSize:"14px",color:C.text,fontFamily:C.font,width:"100%",outline:"none",boxSizing:"border-box",fontWeight:"600"};
+const inp = {background:"var(--bc-inpbg)",border:`2px solid ${C.borderHi}`,borderRadius:"7px",padding:"10px 12px",fontSize:"14px",color:C.text,fontFamily:C.font,width:"100%",outline:"none",boxSizing:"border-box",fontWeight:"600"};
 const btn = (v="gold",full=false) => ({
   padding:"11px 18px",borderRadius:"8px",fontSize:"11px",fontWeight:"800",letterSpacing:"0.12em",
   textTransform:"uppercase",cursor:"pointer",fontFamily:C.font,border:"none",width:full?"100%":"auto",
   background: v==="gold"?C.gold:v==="green"?C.green:v==="red"?C.red:v==="blue"?C.blue:v==="purple"?C.purple:C.s3,
-  color: v==="ghost"?C.muted:v==="default"?C.text:"#fff",
+  color: v==="ghost"?C.muted:v==="default"?C.text:"var(--bc-onaccent)",
 });
 const badge = (color,bg) => ({background:bg,color,fontSize:"9px",letterSpacing:"0.12em",fontWeight:"800",textTransform:"uppercase",padding:"3px 8px",borderRadius:"4px",display:"inline-block",border:`1px solid ${color}22`});
-const tabBtn = (active) => ({flex:1,padding:"10px 6px",textAlign:"center",fontSize:"10px",fontWeight:"800",letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer",background:active?C.gold:"transparent",color:active?"#fff":C.muted,border:"none",fontFamily:C.font,borderRadius:"5px",transition:"all 0.15s"});
+const tabBtn = (active) => ({flex:1,padding:"10px 6px",textAlign:"center",fontSize:"10px",fontWeight:"800",letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer",background:active?C.gold:"transparent",color:active?"var(--bc-onaccent)":C.muted,border:"none",fontFamily:C.font,borderRadius:"5px",transition:"all 0.15s"});
 
 // ── LOGO — real PNG mark ──────────────────────────────────────────────────────
 function Logo({size=40}) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src="/bigcrewlogo.png" alt="BigCrew" width={size} height={size} style={{objectFit:"contain",display:"block"}}/>
+    <img src="/bigcrewlogo.png" alt="BigCrew" width={size} height={size} style={{objectFit:"contain",display:"block",filter:"var(--bc-logofilter)"}}/>
   );
 }
 
@@ -1524,6 +1545,17 @@ export default function App() {
   const [screen, setScreen] = useState("login"); // login | home | shift | admin | calendar | hours | availability | newshift | message
   const [currentUser, setCurrentUser] = useState(null); // {id, name, role:"manager"|"crew"}
   const [activeShiftId, setActiveShiftId] = useState("s1");
+  const [theme, setTheme] = useState("light");
+
+  // Apply theme synchronously before paint, and on every change persist it.
+  useEffect(()=>{
+    const saved = (()=>{ try { return localStorage.getItem("bigcrew_theme"); } catch { return null; } })();
+    if(saved) setTheme(saved); else applyTheme("light");
+  },[]);
+  useEffect(()=>{
+    applyTheme(theme);
+    try { localStorage.setItem("bigcrew_theme", theme); } catch {}
+  },[theme]);
 
   useEffect(()=>{
     load().then(saved=>{
@@ -1556,25 +1588,43 @@ export default function App() {
 
   if(!loaded) return <Spinner/>;
 
-  // Route
-  if(screen==="login") return <LoginScreen state={state} setCurrentUser={setCurrentUser} setScreen={setScreen}/>;
-  if(!currentUser) return <LoginScreen state={state} setCurrentUser={setCurrentUser} setScreen={setScreen}/>;
+  // Route → compute the active screen, then wrap with the theme toggle.
+  let body;
+  if(screen==="login" || !currentUser) body = <LoginScreen state={state} setCurrentUser={setCurrentUser} setScreen={setScreen}/>;
+  else if(screen==="calendar"||screen==="schedule") body = <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="calendar"/>;
+  else if(screen==="weekgrid") body = <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="week"/>;
+  else if(screen==="availability") body = <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="avail"/>;
+  else if(screen==="hours") body = <HoursScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift}/>;
+  else if(screen==="expenses") body = <ExpenseScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser}/>;
+  else if(screen==="newshift") body = <NewShiftScreen state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>;
+  else if(screen==="message") body = <MessageScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} activeShift={activeShift} currentUser={currentUser}/>;
+  else if(screen==="shift") body = <ShiftScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift}/>;
+  else if(screen==="admin") body = <AdminScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
+  else if(screen==="search") body = <SearchScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
+  else if(screen==="reports") body = <ReportsScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
+  else body = <HomeScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} setCurrentUser={setCurrentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
 
-  const isManager = currentUser.role==="manager";
+  return <>{body}<ThemeToggle theme={theme} setTheme={setTheme}/></>;
+}
 
-  if(screen==="calendar"||screen==="schedule") return <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="calendar"/>;
-  if(screen==="weekgrid") return <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="week"/>;
-  if(screen==="availability") return <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="avail"/>;
-  if(screen==="hours") return <HoursScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift}/>;
-  if(screen==="expenses") return <ExpenseScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser}/>;
-  if(screen==="newshift") return <NewShiftScreen state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>;
-  if(screen==="message") return <MessageScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} activeShift={activeShift} currentUser={currentUser}/>;
-  if(screen==="shift") return <ShiftScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift}/>;
-  if(screen==="admin") return <AdminScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
-  if(screen==="search") return <SearchScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
-  if(screen==="reports") return <ReportsScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
-
-  return <HomeScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} setCurrentUser={setCurrentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
+function ThemeToggle({theme, setTheme}) {
+  const dark = theme === "dark";
+  return (
+    <button
+      onClick={()=>setTheme(t=>t==="dark"?"light":"dark")}
+      title={dark ? "Switch to light mode" : "Switch to dark mode"}
+      style={{
+        position:"fixed", right:"16px", bottom:"86px", zIndex:300,
+        width:"46px", height:"46px", borderRadius:"50%",
+        border:`2px solid ${C.borderHi}`, background:C.s1, color:C.text,
+        fontSize:"19px", cursor:"pointer", display:"flex",
+        alignItems:"center", justifyContent:"center",
+        boxShadow:"0 4px 16px rgba(0,0,0,0.28)",
+      }}
+    >
+      {dark ? "☀" : "☾"}
+    </button>
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
