@@ -1,17 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
   const router = useRouter();
   const [leaving, setLeaving] = useState(false);
+  const [dark, setDark] = useState(false);
+
+  // Share the same theme preference as the BigCrew app.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("bigcrew_theme");
+      if (saved === "dark") setDark(true);
+    } catch {}
+  }, []);
+
+  function toggleTheme() {
+    setDark((d) => {
+      const next = !d;
+      try { localStorage.setItem("bigcrew_theme", next ? "dark" : "light"); } catch {}
+      return next;
+    });
+  }
 
   function enter() {
     if (leaving) return;
     setLeaving(true);
     setTimeout(() => router.push("/bigcrew"), 1150);
   }
+
+  // Landing palette flips with the theme.
+  const bg = dark ? "#0c0c0d" : "#ffffff";
+  const fg = dark ? "#f2f2f2" : "#080808";
+  const sub = dark ? "#8a8a8a" : "#888888";
+  const logoFilter = dark ? "invert(1)" : "none";
 
   return (
     <>
@@ -20,8 +43,8 @@ export default function Home() {
 
         .bc-enter {
           display: inline-block;
-          border: 2px solid #080808;
-          color: #080808;
+          border: 2px solid var(--fg);
+          color: var(--fg);
           letter-spacing: 0.28em;
           padding: 15px 56px;
           font-size: 15px;
@@ -32,7 +55,17 @@ export default function Home() {
           transition: background 0.2s, color 0.2s, letter-spacing 0.2s;
           margin-top: 44px;
         }
-        .bc-enter:hover { background: #080808; color: #fff; letter-spacing: 0.34em; }
+        .bc-enter:hover { background: var(--fg); color: var(--bg); letter-spacing: 0.34em; }
+
+        .bc-toggle {
+          position: fixed; right: 18px; top: 18px; z-index: 50;
+          width: 44px; height: 44px; border-radius: 50%;
+          border: 2px solid var(--fg); background: transparent; color: var(--fg);
+          font-size: 18px; cursor: pointer; display: flex;
+          align-items: center; justify-content: center;
+          transition: background 0.2s, color 0.2s, transform 0.2s;
+        }
+        .bc-toggle:hover { transform: scale(1.08); }
 
         /* landing content leaving */
         .bc-stage { transition: opacity 0.4s ease, transform 0.6s cubic-bezier(0.6,0,0.2,1); }
@@ -74,15 +107,19 @@ export default function Home() {
 
       <main
         className="min-h-screen flex flex-col items-center justify-center px-4"
-        style={{ background: "#ffffff", overflow: "hidden" }}
+        style={{ background: bg, overflow: "hidden", transition: "background 0.3s ease", ["--fg" as string]: fg, ["--bg" as string]: bg }}
       >
+        <button className="bc-toggle" onClick={toggleTheme} title={dark ? "Switch to light mode" : "Switch to dark mode"}>
+          {dark ? "☀" : "☾"}
+        </button>
+
         <div className={`bc-stage flex flex-col items-center ${leaving ? "leaving" : ""}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/bigcrewlogo.png" alt="BigCrew NY" width={280} height={280} style={{ objectFit: "contain" }} />
-          <p style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", color: "#080808", fontSize: "26px", letterSpacing: "0.1em", marginTop: "28px", textAlign: "center" }}>
+          <img src="/bigcrewlogo.png" alt="BigCrew NY" width={280} height={280} style={{ objectFit: "contain", filter: logoFilter, transition: "filter 0.3s ease" }} />
+          <p style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", color: fg, fontSize: "26px", letterSpacing: "0.1em", marginTop: "28px", textAlign: "center", transition: "color 0.3s ease" }}>
             On Time. On Point. On It.
           </p>
-          <p style={{ color: "#888", fontSize: "10px", letterSpacing: "0.32em", marginTop: "10px", textTransform: "uppercase" }}>
+          <p style={{ color: sub, fontSize: "10px", letterSpacing: "0.32em", marginTop: "10px", textTransform: "uppercase" }}>
             Crew Management System
           </p>
           <button className="bc-enter" onClick={enter}>ENTER</button>
