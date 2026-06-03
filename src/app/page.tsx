@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-const COLS = 6;
-const ROWS = 9;
+const LAYERS = 7;
 
 export default function Home() {
   const router = useRouter();
@@ -40,41 +39,44 @@ export default function Home() {
         .bc-stage { transition: opacity 0.35s ease, transform 0.5s cubic-bezier(0.6,0,0.2,1); }
         .bc-stage.leaving { opacity: 0; transform: scale(1.12); }
 
-        /* black steel deck grid */
+        /* stacked black steel deck layers */
         .bc-deck {
           position: fixed; inset: 0; z-index: 998;
-          display: grid;
-          grid-template-columns: repeat(${COLS}, 1fr);
-          grid-template-rows: repeat(${ROWS}, 1fr);
-          perspective: 900px;
+          display: flex; flex-direction: column;
           pointer-events: none;
         }
-        .bc-tile {
+        .bc-layer {
+          flex: 1;
           position: relative;
-          transform-origin: top center;
-          transform: rotateX(-100deg);
           opacity: 0;
-          background:
-            linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 18%),
-            linear-gradient(135deg, #1b1d20 0%, #000000 58%, #0c0e10 100%);
-          border: 1px solid #000;
-          box-shadow: inset 0 0 18px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05);
+          /* black steel deck with triangulated truss bracing */
+          background-color: #050506;
+          background-image:
+            linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0) 22%, rgba(0,0,0,0.6)),
+            repeating-linear-gradient(45deg, transparent 0 20px, rgba(150,154,160,0.45) 20px 22px),
+            repeating-linear-gradient(-45deg, transparent 0 20px, rgba(150,154,160,0.45) 20px 22px);
+          border-top: 3px solid #2b2e33;
+          border-bottom: 4px solid #000;
+          box-shadow: inset 0 0 40px rgba(0,0,0,0.85);
         }
-        .bc-deck.go .bc-tile {
-          animation: bcFlip 0.5s cubic-bezier(0.3,1.3,0.5,1) forwards;
+        .bc-deck.go .bc-layer {
+          animation: bcSlide 0.5s cubic-bezier(0.32,1.25,0.5,1) forwards;
         }
-        @keyframes bcFlip {
-          0%   { transform: rotateX(-100deg); opacity: 0; }
-          60%  { opacity: 1; }
-          100% { transform: rotateX(0deg); opacity: 1; }
+        .bc-layer.l { transform: translateX(-115%); }
+        .bc-layer.r { transform: translateX(115%); }
+        @keyframes bcSlide {
+          0%   { opacity: 0.5; }
+          70%  { opacity: 1; }
+          100% { transform: translateX(0); opacity: 1; }
         }
-        /* bolt heads, top-left + top-right of each tile */
-        .bc-tile::before, .bc-tile::after {
-          content: ""; position: absolute; top: 8px; width: 5px; height: 5px; border-radius: 50%;
-          background: radial-gradient(circle at 35% 35%, #5a5f66, #0a0b0d);
+        /* bolt heads on the rails */
+        .bc-layer::before, .bc-layer::after {
+          content: ""; position: absolute; top: 7px; width: 6px; height: 6px; border-radius: 50%;
+          background: radial-gradient(circle at 35% 35%, #7a7f86, #0a0b0d);
+          box-shadow: 22px 0 0 #0a0b0d33;
         }
-        .bc-tile::before { left: 8px; }
-        .bc-tile::after  { right: 8px; }
+        .bc-layer::before { left: 10px; }
+        .bc-layer::after  { right: 10px; }
 
         /* logo bridge */
         .bc-bridge {
@@ -82,13 +84,13 @@ export default function Home() {
           display: flex; flex-direction: column; align-items: center; justify-content: center;
           opacity: 0; pointer-events: none;
         }
-        .bc-bridge.go { animation: bcBridge 0.9s ease 0.78s forwards; }
+        .bc-bridge.go { animation: bcBridge 0.9s ease 0.72s forwards; }
         @keyframes bcBridge {
           0%   { opacity: 0; transform: scale(0.8) translateY(8px); }
           45%  { opacity: 1; transform: scale(1) translateY(0); }
           100% { opacity: 1; transform: scale(1.04); }
         }
-        .bc-bridge img { width: 200px; height: 200px; object-fit: contain; filter: invert(1); }
+        .bc-bridge img { width: 210px; height: 210px; object-fit: contain; filter: invert(1); }
         .bc-dots { display: flex; gap: 7px; margin-top: 30px; }
         .bc-dots span { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: bcPulse 1s infinite ease-in-out; }
         .bc-dots span:nth-child(2) { animation-delay: 0.15s; }
@@ -112,19 +114,15 @@ export default function Home() {
           <button className="bc-enter" onClick={enter}>ENTER</button>
         </div>
 
-        {/* black steel deck flipping into place, diagonal sweep */}
+        {/* black steel deck layers sliding in and stacking (bottom-up) */}
         <div className={`bc-deck ${leaving ? "go" : ""}`}>
-          {Array.from({ length: COLS * ROWS }).map((_, i) => {
-            const row = Math.floor(i / COLS);
-            const col = i % COLS;
-            return (
-              <div
-                key={i}
-                className="bc-tile"
-                style={{ animationDelay: `${(row + col) * 0.05}s` }}
-              />
-            );
-          })}
+          {Array.from({ length: LAYERS }).map((_, i) => (
+            <div
+              key={i}
+              className={`bc-layer ${i % 2 === 0 ? "l" : "r"}`}
+              style={{ animationDelay: `${(LAYERS - 1 - i) * 0.08}s` }}
+            />
+          ))}
         </div>
 
         {/* logo bridge */}
