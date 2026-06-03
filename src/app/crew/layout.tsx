@@ -18,7 +18,7 @@ export default async function CrewLayout({ children }: { children: React.ReactNo
     <div className="min-h-screen flex">
       <aside className="w-56 bg-gray-900 text-white flex flex-col">
         <div className="p-5 border-b border-gray-700">
-          <p className="font-bold text-lg">CrewBrain</p>
+          <p className="font-bold text-lg tracking-wider uppercase">BigCrew NY</p>
           <p className="text-xs text-gray-400 mt-0.5">Crew Portal</p>
         </div>
         <nav className="flex-1 p-4 space-y-1">

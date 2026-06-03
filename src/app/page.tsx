@@ -10,7 +10,7 @@ export default function Home() {
   function enter() {
     if (leaving) return;
     setLeaving(true);
-    setTimeout(() => router.push("/bigcrew"), 1150);
+    setTimeout(() => router.push("/login"), 1150);
   }
 
   return (
