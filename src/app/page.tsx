@@ -57,15 +57,24 @@ export default function Home() {
         }
         .bc-enter:hover { background: var(--fg); color: var(--bg); letter-spacing: 0.34em; }
 
-        .bc-toggle {
+        /* on/off slider switch */
+        .bc-switch {
           position: fixed; right: 18px; top: 18px; z-index: 50;
-          width: 44px; height: 44px; border-radius: 50%;
-          border: 2px solid var(--fg); background: transparent; color: var(--fg);
-          font-size: 18px; cursor: pointer; display: flex;
-          align-items: center; justify-content: center;
-          transition: background 0.2s, color 0.2s, transform 0.2s;
+          width: 62px; height: 32px; border-radius: 999px;
+          border: 2px solid var(--fg); background: transparent;
+          cursor: pointer; padding: 0; display: block;
+          transition: background 0.25s ease;
         }
-        .bc-toggle:hover { transform: scale(1.08); }
+        .bc-switch.on { background: var(--fg); }
+        .bc-knob {
+          position: absolute; top: 3px; left: 3px;
+          width: 22px; height: 22px; border-radius: 50%;
+          background: var(--fg);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 12px; color: var(--bg);
+          transition: transform 0.25s cubic-bezier(0.4,0,0.2,1), background 0.25s ease, color 0.25s ease;
+        }
+        .bc-switch.on .bc-knob { transform: translateX(30px); background: var(--bg); color: var(--fg); }
 
         /* landing content leaving */
         .bc-stage { transition: opacity 0.4s ease, transform 0.6s cubic-bezier(0.6,0,0.2,1); }
@@ -109,8 +118,8 @@ export default function Home() {
         className="min-h-screen flex flex-col items-center justify-center px-4"
         style={{ background: bg, overflow: "hidden", transition: "background 0.3s ease", ["--fg" as string]: fg, ["--bg" as string]: bg }}
       >
-        <button className="bc-toggle" onClick={toggleTheme} title={dark ? "Switch to light mode" : "Switch to dark mode"}>
-          {dark ? "☀" : "☾"}
+        <button className={`bc-switch ${dark ? "on" : ""}`} onClick={toggleTheme} title={dark ? "Switch to light mode" : "Switch to dark mode"} aria-label="Toggle dark mode">
+          <span className="bc-knob">{dark ? "☀" : "☾"}</span>
         </button>
 
         <div className={`bc-stage flex flex-col items-center ${leaving ? "leaving" : ""}`}>
