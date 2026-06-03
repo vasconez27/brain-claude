@@ -1,40 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+
+const LAYERS = 7;
 
 export default function Home() {
   const router = useRouter();
   const [leaving, setLeaving] = useState(false);
-  const [dark, setDark] = useState(false);
-
-  // Share the same theme preference as the BigCrew app.
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("bigcrew_theme");
-      if (saved === "dark") setDark(true);
-    } catch {}
-  }, []);
-
-  function toggleTheme() {
-    setDark((d) => {
-      const next = !d;
-      try { localStorage.setItem("bigcrew_theme", next ? "dark" : "light"); } catch {}
-      return next;
-    });
-  }
 
   function enter() {
     if (leaving) return;
     setLeaving(true);
-    setTimeout(() => router.push("/bigcrew"), 1150);
+    setTimeout(() => router.push("/bigcrew"), 1500);
   }
-
-  // Landing palette flips with the theme.
-  const bg = dark ? "#0c0c0d" : "#ffffff";
-  const fg = dark ? "#f2f2f2" : "#080808";
-  const sub = dark ? "#8a8a8a" : "#888888";
-  const logoFilter = dark ? "invert(1)" : "none";
 
   return (
     <>
@@ -43,8 +22,8 @@ export default function Home() {
 
         .bc-enter {
           display: inline-block;
-          border: 2px solid var(--fg);
-          color: var(--fg);
+          border: 2px solid #080808;
+          color: #080808;
           letter-spacing: 0.28em;
           padding: 15px 56px;
           font-size: 15px;
@@ -55,58 +34,63 @@ export default function Home() {
           transition: background 0.2s, color 0.2s, letter-spacing 0.2s;
           margin-top: 44px;
         }
-        .bc-enter:hover { background: var(--fg); color: var(--bg); letter-spacing: 0.34em; }
+        .bc-enter:hover { background: #080808; color: #fff; letter-spacing: 0.34em; }
 
-        /* on/off slider switch */
-        .bc-switch {
-          position: fixed; right: 18px; top: 18px; z-index: 50;
-          width: 62px; height: 32px; border-radius: 999px;
-          border: 2px solid var(--fg); background: transparent;
-          cursor: pointer; padding: 0; display: block;
-          transition: background 0.25s ease;
-        }
-        .bc-switch.on { background: var(--fg); }
-        .bc-knob {
-          position: absolute; top: 3px; left: 3px;
-          width: 22px; height: 22px; border-radius: 50%;
-          background: var(--fg);
-          display: flex; align-items: center; justify-content: center;
-          font-size: 12px; color: var(--bg);
-          transition: transform 0.25s cubic-bezier(0.4,0,0.2,1), background 0.25s ease, color 0.25s ease;
-        }
-        .bc-switch.on .bc-knob { transform: translateX(30px); background: var(--bg); color: var(--fg); }
+        .bc-stage { transition: opacity 0.35s ease, transform 0.5s cubic-bezier(0.6,0,0.2,1); }
+        .bc-stage.leaving { opacity: 0; transform: scale(1.12); }
 
-        /* landing content leaving */
-        .bc-stage { transition: opacity 0.4s ease, transform 0.6s cubic-bezier(0.6,0,0.2,1); }
-        .bc-stage.leaving { opacity: 0; transform: scale(1.18); }
-
-        /* black iris expanding from center */
-        .bc-iris {
-          position: fixed; left: 50%; top: 50%;
-          width: 14px; height: 14px; border-radius: 50%;
-          background: #080808;
-          transform: translate(-50%, -50%) scale(0);
-          z-index: 998; pointer-events: none;
+        /* stacked black steel deck layers */
+        .bc-deck {
+          position: fixed; inset: 0; z-index: 998;
+          display: flex; flex-direction: column;
+          pointer-events: none;
         }
-        .bc-iris.go { animation: bcIris 0.7s cubic-bezier(0.76,0,0.24,1) forwards; }
-        @keyframes bcIris {
-          from { transform: translate(-50%,-50%) scale(0); }
-          to   { transform: translate(-50%,-50%) scale(360); }
+        .bc-layer {
+          flex: 1;
+          position: relative;
+          opacity: 0;
+          /* black steel deck with triangulated truss bracing */
+          background-color: #050506;
+          background-image:
+            linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0) 22%, rgba(0,0,0,0.6)),
+            repeating-linear-gradient(45deg, transparent 0 20px, rgba(150,154,160,0.45) 20px 22px),
+            repeating-linear-gradient(-45deg, transparent 0 20px, rgba(150,154,160,0.45) 20px 22px);
+          border-top: 3px solid #2b2e33;
+          border-bottom: 4px solid #000;
+          box-shadow: inset 0 0 40px rgba(0,0,0,0.85);
         }
+        .bc-deck.go .bc-layer {
+          animation: bcSlide 0.5s cubic-bezier(0.32,1.25,0.5,1) forwards;
+        }
+        .bc-layer.l { transform: translateX(-115%); }
+        .bc-layer.r { transform: translateX(115%); }
+        @keyframes bcSlide {
+          0%   { opacity: 0.5; }
+          70%  { opacity: 1; }
+          100% { transform: translateX(0); opacity: 1; }
+        }
+        /* bolt heads on the rails */
+        .bc-layer::before, .bc-layer::after {
+          content: ""; position: absolute; top: 7px; width: 6px; height: 6px; border-radius: 50%;
+          background: radial-gradient(circle at 35% 35%, #7a7f86, #0a0b0d);
+          box-shadow: 22px 0 0 #0a0b0d33;
+        }
+        .bc-layer::before { left: 10px; }
+        .bc-layer::after  { right: 10px; }
 
-        /* white logo on black loading screen */
+        /* logo bridge */
         .bc-bridge {
           position: fixed; inset: 0; z-index: 999;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
           opacity: 0; pointer-events: none;
         }
-        .bc-bridge.go { animation: bcBridge 0.85s ease 0.42s forwards; }
+        .bc-bridge.go { animation: bcBridge 0.9s ease 0.72s forwards; }
         @keyframes bcBridge {
-          0%   { opacity: 0; transform: scale(0.82); }
-          35%  { opacity: 1; transform: scale(1); }
-          100% { opacity: 1; transform: scale(1.05); }
+          0%   { opacity: 0; transform: scale(0.8) translateY(8px); }
+          45%  { opacity: 1; transform: scale(1) translateY(0); }
+          100% { opacity: 1; transform: scale(1.04); }
         }
-        .bc-bridge img { width: 200px; height: 200px; object-fit: contain; filter: invert(1); }
+        .bc-bridge img { width: 210px; height: 210px; object-fit: contain; filter: invert(1); }
         .bc-dots { display: flex; gap: 7px; margin-top: 30px; }
         .bc-dots span { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: bcPulse 1s infinite ease-in-out; }
         .bc-dots span:nth-child(2) { animation-delay: 0.15s; }
@@ -116,25 +100,32 @@ export default function Home() {
 
       <main
         className="min-h-screen flex flex-col items-center justify-center px-4"
-        style={{ background: bg, overflow: "hidden", transition: "background 0.3s ease", ["--fg" as string]: fg, ["--bg" as string]: bg }}
+        style={{ background: "#ffffff", overflow: "hidden" }}
       >
-        <button className={`bc-switch ${dark ? "on" : ""}`} onClick={toggleTheme} title={dark ? "Switch to light mode" : "Switch to dark mode"} aria-label="Toggle dark mode">
-          <span className="bc-knob">{dark ? "☀" : "☾"}</span>
-        </button>
-
         <div className={`bc-stage flex flex-col items-center ${leaving ? "leaving" : ""}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/bigcrewlogo.png" alt="BigCrew NY" width={280} height={280} style={{ objectFit: "contain", filter: logoFilter, transition: "filter 0.3s ease" }} />
-          <p style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", color: fg, fontSize: "26px", letterSpacing: "0.1em", marginTop: "28px", textAlign: "center", transition: "color 0.3s ease" }}>
+          <img src="/bigcrewlogo.png" alt="BigCrew NY" width={280} height={280} style={{ objectFit: "contain" }} />
+          <p style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", color: "#080808", fontSize: "26px", letterSpacing: "0.1em", marginTop: "28px", textAlign: "center" }}>
             On Time. On Point. On It.
           </p>
-          <p style={{ color: sub, fontSize: "10px", letterSpacing: "0.32em", marginTop: "10px", textTransform: "uppercase" }}>
+          <p style={{ color: "#888", fontSize: "10px", letterSpacing: "0.32em", marginTop: "10px", textTransform: "uppercase" }}>
             Crew Management System
           </p>
           <button className="bc-enter" onClick={enter}>ENTER</button>
         </div>
 
-        <div className={`bc-iris ${leaving ? "go" : ""}`} />
+        {/* black steel deck layers sliding in and stacking (bottom-up) */}
+        <div className={`bc-deck ${leaving ? "go" : ""}`}>
+          {Array.from({ length: LAYERS }).map((_, i) => (
+            <div
+              key={i}
+              className={`bc-layer ${i % 2 === 0 ? "l" : "r"}`}
+              style={{ animationDelay: `${(LAYERS - 1 - i) * 0.08}s` }}
+            />
+          ))}
+        </div>
+
+        {/* logo bridge */}
         <div className={`bc-bridge ${leaving ? "go" : ""}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/bigcrewlogo.png" alt="" />
