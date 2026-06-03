@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-const PLANKS = 8;
+const COLS = 6;
+const ROWS = 9;
 
 export default function Home() {
   const router = useRouter();
@@ -39,48 +40,49 @@ export default function Home() {
         .bc-stage { transition: opacity 0.35s ease, transform 0.5s cubic-bezier(0.6,0,0.2,1); }
         .bc-stage.leaving { opacity: 0; transform: scale(1.12); }
 
-        /* steel deck assembly */
+        /* black steel deck grid */
         .bc-deck {
           position: fixed; inset: 0; z-index: 998;
-          display: flex; pointer-events: none;
+          display: grid;
+          grid-template-columns: repeat(${COLS}, 1fr);
+          grid-template-rows: repeat(${ROWS}, 1fr);
+          perspective: 900px;
+          pointer-events: none;
         }
-        .bc-plank {
-          flex: 1;
-          background:
-            linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0) 12%),
-            repeating-linear-gradient(180deg, #34383e 0 38px, #2c3036 38px 40px),
-            linear-gradient(135deg, #3a3e44 0%, #23262b 55%, #2b2f34 100%);
-          border-right: 2px solid #14161a;
-          border-left: 1px solid rgba(255,255,255,0.06);
-          box-shadow: inset 0 0 22px rgba(0,0,0,0.55);
-          transform: translateY(105%);
+        .bc-tile {
+          position: relative;
+          transform-origin: top center;
+          transform: rotateX(-100deg);
           opacity: 0;
+          background:
+            linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 18%),
+            linear-gradient(135deg, #1b1d20 0%, #000000 58%, #0c0e10 100%);
+          border: 1px solid #000;
+          box-shadow: inset 0 0 18px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05);
         }
-        .bc-deck.go .bc-plank {
-          animation: bcSlam 0.5s cubic-bezier(0.34,1.4,0.5,1) forwards;
+        .bc-deck.go .bc-tile {
+          animation: bcFlip 0.5s cubic-bezier(0.3,1.3,0.5,1) forwards;
         }
-        @keyframes bcSlam {
-          0%   { transform: translateY(105%); opacity: 0.4; }
-          70%  { opacity: 1; }
-          85%  { transform: translateY(-2.5%); }
-          100% { transform: translateY(0); opacity: 1; }
+        @keyframes bcFlip {
+          0%   { transform: rotateX(-100deg); opacity: 0; }
+          60%  { opacity: 1; }
+          100% { transform: rotateX(0deg); opacity: 1; }
         }
-        /* bolt heads at the corners of each plank for that deck-hardware look */
-        .bc-plank::before, .bc-plank::after {
-          content: ""; position: absolute; width: 6px; height: 6px; border-radius: 50%;
-          background: radial-gradient(circle at 35% 35%, #6a6f76, #1a1c20);
-          left: 7px;
+        /* bolt heads, top-left + top-right of each tile */
+        .bc-tile::before, .bc-tile::after {
+          content: ""; position: absolute; top: 8px; width: 5px; height: 5px; border-radius: 50%;
+          background: radial-gradient(circle at 35% 35%, #5a5f66, #0a0b0d);
         }
-        .bc-plank::before { top: 12px; }
-        .bc-plank::after  { bottom: 12px; }
+        .bc-tile::before { left: 8px; }
+        .bc-tile::after  { right: 8px; }
 
-        /* logo bridge on assembled steel */
+        /* logo bridge */
         .bc-bridge {
           position: fixed; inset: 0; z-index: 999;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
           opacity: 0; pointer-events: none;
         }
-        .bc-bridge.go { animation: bcBridge 0.9s ease 0.62s forwards; }
+        .bc-bridge.go { animation: bcBridge 0.9s ease 0.78s forwards; }
         @keyframes bcBridge {
           0%   { opacity: 0; transform: scale(0.8) translateY(8px); }
           45%  { opacity: 1; transform: scale(1) translateY(0); }
@@ -110,15 +112,19 @@ export default function Home() {
           <button className="bc-enter" onClick={enter}>ENTER</button>
         </div>
 
-        {/* steel deck planks slamming into place */}
+        {/* black steel deck flipping into place, diagonal sweep */}
         <div className={`bc-deck ${leaving ? "go" : ""}`}>
-          {Array.from({ length: PLANKS }).map((_, i) => (
-            <div
-              key={i}
-              className="bc-plank"
-              style={{ animationDelay: `${i * 0.06}s`, position: "relative" }}
-            />
-          ))}
+          {Array.from({ length: COLS * ROWS }).map((_, i) => {
+            const row = Math.floor(i / COLS);
+            const col = i % COLS;
+            return (
+              <div
+                key={i}
+                className="bc-tile"
+                style={{ animationDelay: `${(row + col) * 0.05}s` }}
+              />
+            );
+          })}
         </div>
 
         {/* logo bridge */}
