@@ -4,13 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && node scripts/prisma-push.mjs && next build",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint",
-    "seed": "prisma db seed"
-  },
-  "prisma": {
-    "seed": "npx tsx prisma/seed.ts"
+    "lint": "eslint"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^1.6.0",
@@ -40,7 +36,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
     "tailwindcss": "^4",
-    "tsx": "^4.22.4",
     "typescript": "^5"
   }
 }

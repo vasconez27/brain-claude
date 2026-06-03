@@ -1,6 +1,5 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
@@ -12,16 +11,6 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
   },
   providers: [
-    // Google OAuth — only registered if credentials are configured.
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-      ? [
-          GoogleProvider({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            allowDangerousEmailAccountLinking: true,
-          }),
-        ]
-      : []),
     CredentialsProvider({
       name: "credentials",
       credentials: {
@@ -35,8 +24,7 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email },
         });
 
-        // No user, or a Google-only account with no password set.
-        if (!user || !user.passwordHash) return null;
+        if (!user) return null;
 
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
         if (!valid) return null;
@@ -50,15 +38,6 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
-      }
-      // For OAuth sign-ins the role may not be on the user object yet —
-      // pull it from the database using the email on the token.
-      if (!token.role && token.email) {
-        const dbUser = await prisma.user.findUnique({ where: { email: token.email } });
-        if (dbUser) {
-          token.id = dbUser.id;
-          token.role = dbUser.role;
-        }
       }
       return token;
     },
