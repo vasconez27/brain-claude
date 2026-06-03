@@ -18,7 +18,7 @@ try {
 
 // Seed demo accounts (idempotent — safe to run on every deploy).
 try {
-  execSync("tsx prisma/seed.ts", { stdio: "inherit" });
+  execSync("npx tsx prisma/seed.ts", { stdio: "inherit" });
 } catch {
   // Seeding is non-fatal: the build should still succeed without demo data.
   console.warn("⚠  Seed step skipped or failed (non-fatal).");
