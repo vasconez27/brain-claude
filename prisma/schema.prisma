@@ -29,7 +29,8 @@ model User {
   name          String
   email         String    @unique
   phone         String?
-  passwordHash  String
+  passwordHash  String?
+  pin           String?   @unique
   role          Role      @default(CREW)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

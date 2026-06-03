@@ -12,7 +12,7 @@ const schema = z.object({
   inviteCode: z.string().optional(),
 });
 
-const MANAGER_INVITE_CODE = process.env.MANAGER_INVITE_CODE ?? "manager2024";
+const MANAGER_INVITE_CODE = process.env.MANAGER_INVITE_CODE ?? "BALLIN";
 
 export async function POST(req: Request) {
   const body = await req.json();
