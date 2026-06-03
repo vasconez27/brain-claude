@@ -10,14 +10,14 @@ export default function Home() {
   function enter() {
     if (leaving) return;
     setLeaving(true);
-    // let the circle expand, then navigate into the app
-    setTimeout(() => router.push("/bigcrew"), 620);
+    setTimeout(() => router.push("/bigcrew"), 1150);
   }
 
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+
         .bc-enter {
           display: inline-block;
           border: 2px solid #080808;
@@ -29,29 +29,53 @@ export default function Home() {
           font-weight: 700;
           background: transparent;
           cursor: pointer;
-          transition: background 0.2s, color 0.2s;
+          transition: background 0.2s, color 0.2s, letter-spacing 0.2s;
           margin-top: 44px;
         }
-        .bc-enter:hover { background: #080808; color: #fff; }
-        .bc-stage { transition: opacity 0.4s ease, transform 0.5s ease; }
-        .bc-stage.leaving { opacity: 0; transform: scale(0.94); }
-        .bc-wipe {
-          position: fixed;
-          left: 50%; top: 50%;
-          width: 10px; height: 10px;
-          border-radius: 50%;
+        .bc-enter:hover { background: #080808; color: #fff; letter-spacing: 0.34em; }
+
+        /* landing content leaving */
+        .bc-stage { transition: opacity 0.4s ease, transform 0.6s cubic-bezier(0.6,0,0.2,1); }
+        .bc-stage.leaving { opacity: 0; transform: scale(1.18); }
+
+        /* black iris expanding from the logo center */
+        .bc-iris {
+          position: fixed; left: 50%; top: 50%;
+          width: 14px; height: 14px; border-radius: 50%;
           background: #080808;
           transform: translate(-50%, -50%) scale(0);
-          z-index: 999;
-          pointer-events: none;
+          z-index: 998; pointer-events: none;
         }
-        .bc-wipe.go {
-          animation: bcExpand 0.62s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+        .bc-iris.go { animation: bcIris 0.7s cubic-bezier(0.76,0,0.24,1) forwards; }
+        @keyframes bcIris {
+          from { transform: translate(-50%,-50%) scale(0); }
+          to   { transform: translate(-50%,-50%) scale(360); }
         }
-        @keyframes bcExpand {
-          from { transform: translate(-50%, -50%) scale(0); }
-          to   { transform: translate(-50%, -50%) scale(300); }
+
+        /* white logo bridge on the black field */
+        .bc-bridge {
+          position: fixed; inset: 0; z-index: 999;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          opacity: 0; pointer-events: none;
         }
+        .bc-bridge.go { animation: bcBridge 0.85s ease 0.42s forwards; }
+        @keyframes bcBridge {
+          0%   { opacity: 0; transform: scale(0.82); }
+          35%  { opacity: 1; transform: scale(1); }
+          100% { opacity: 1; transform: scale(1.05); }
+        }
+        .bc-bridge img {
+          width: 200px; height: 200px; object-fit: contain;
+          filter: invert(1);            /* white-bg/black-logo -> black-bg/white-logo */
+        }
+        .bc-dots { display: flex; gap: 7px; margin-top: 30px; }
+        .bc-dots span {
+          width: 7px; height: 7px; border-radius: 50%; background: #fff;
+          animation: bcPulse 1s infinite ease-in-out;
+        }
+        .bc-dots span:nth-child(2) { animation-delay: 0.15s; }
+        .bc-dots span:nth-child(3) { animation-delay: 0.3s; }
+        @keyframes bcPulse { 0%,100%{opacity:0.25;transform:scale(0.8);} 50%{opacity:1;transform:scale(1);} }
       `}</style>
 
       <main
@@ -98,7 +122,13 @@ export default function Home() {
           </button>
         </div>
 
-        <div className={`bc-wipe ${leaving ? "go" : ""}`} />
+        {/* transition layers */}
+        <div className={`bc-iris ${leaving ? "go" : ""}`} />
+        <div className={`bc-bridge ${leaving ? "go" : ""}`}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/bigcrewlogo.png" alt="" />
+          <div className="bc-dots"><span /><span /><span /></div>
+        </div>
       </main>
     </>
   );
