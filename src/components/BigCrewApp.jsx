@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTheme } from "next-themes";
 
 // ─── STORAGE ─────────────────────────────────────────────────────────────────
 const SK = "bigcrew_v10";
@@ -1545,17 +1546,13 @@ export default function App({ sessionUser = null }) {
   const [screen, setScreen] = useState("login"); // login | home | shift | admin | calendar | hours | availability | newshift | message
   const [currentUser, setCurrentUser] = useState(null); // {id, name, role:"manager"|"crew"}
   const [activeShiftId, setActiveShiftId] = useState("s1");
-  const [theme, setTheme] = useState("light");
+  // Single source of truth for dark/light across the WHOLE site (next-themes).
+  const { theme, setTheme } = useTheme();
   const autoLoggedIn = useRef(false);
 
-  // Apply theme synchronously before paint, and on every change persist it.
+  // Apply the demo's CSS variables whenever the shared theme changes.
   useEffect(()=>{
-    const saved = (()=>{ try { return localStorage.getItem("bigcrew_theme"); } catch { return null; } })();
-    if(saved) setTheme(saved); else applyTheme("light");
-  },[]);
-  useEffect(()=>{
-    applyTheme(theme);
-    try { localStorage.setItem("bigcrew_theme", theme); } catch {}
+    applyTheme(theme === "dark" ? "dark" : "light");
   },[theme]);
 
   useEffect(()=>{
@@ -1637,7 +1634,7 @@ function ThemeToggle({theme, setTheme}) {
   const dark = theme === "dark";
   return (
     <button
-      onClick={()=>setTheme(t=>t==="dark"?"light":"dark")}
+      onClick={()=>setTheme(dark?"light":"dark")}
       title={dark ? "Switch to light mode" : "Switch to dark mode"}
       style={{
         position:"fixed", right:"16px", bottom:"86px", zIndex:300,
