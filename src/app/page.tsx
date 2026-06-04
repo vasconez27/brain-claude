@@ -34,6 +34,11 @@ export default function Home() {
         }
         .bc-enter:hover { background: #080808; color: #fff; letter-spacing: 0.34em; }
 
+        /* dark mode — flip the ENTER button + logo to light */
+        .dark .bc-enter { border-color: #ededed; color: #ededed; }
+        .dark .bc-enter:hover { background: #ededed; color: #0a0a0a; letter-spacing: 0.34em; }
+        .dark .bc-logo { filter: invert(1); }
+
         /* landing content leaving */
         .bc-stage { transition: opacity 0.4s ease, transform 0.6s cubic-bezier(0.6,0,0.2,1); }
         .bc-stage.leaving { opacity: 0; transform: scale(1.18); }
@@ -80,11 +85,12 @@ export default function Home() {
 
       <main
         className="min-h-screen flex flex-col items-center justify-center px-4"
-        style={{ background: "#ffffff", overflow: "hidden" }}
+        style={{ background: "var(--background)", overflow: "hidden" }}
       >
         <div className={`bc-stage flex flex-col items-center ${leaving ? "leaving" : ""}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
+            className="bc-logo"
             src="/bigcrewlogo.png"
             alt="BigCrew NY"
             width={280}
@@ -95,7 +101,7 @@ export default function Home() {
           <p
             style={{
               fontFamily: "'Bebas Neue','Arial Black',sans-serif",
-              color: "#080808",
+              color: "var(--foreground)",
               fontSize: "26px",
               letterSpacing: "0.1em",
               marginTop: "28px",
