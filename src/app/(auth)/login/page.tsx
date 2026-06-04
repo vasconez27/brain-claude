@@ -51,7 +51,7 @@ export default function LoginPage() {
         {/* Branding */}
         <div className="text-center mb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/bigcrewlogo.png" alt="BigCrew NY"
+          <img src="/bigcrewlogo.png" alt="BigCrew NY" className="dark:invert"
             style={{ width: 72, height: 72, objectFit: "contain", margin: "0 auto 14px" }} />
           <h1 style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", fontSize: 30, letterSpacing: "0.12em", color: "var(--foreground)" }}>
             BigCrew
