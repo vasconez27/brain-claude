@@ -53,7 +53,7 @@ export default function LoginPage() {
           <img src="/bigcrewlogo.png" alt="BigCrew NY"
             style={{ width: 72, height: 72, objectFit: "contain", margin: "0 auto 14px" }} />
           <h1 style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", fontSize: 30, letterSpacing: "0.12em", color: "#080808" }}>
-            BALLIN
+            BigCrew
           </h1>
           <p style={{ fontSize: 11, color: "#888", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 4 }}>
             Crew Management
