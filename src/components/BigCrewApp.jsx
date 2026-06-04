@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTheme } from "next-themes";
 
 // ─── STORAGE ─────────────────────────────────────────────────────────────────
-const SK = "bigcrew_v10";
+const SK = "bigcrew_v11";
 async function load() {
   try {
     const r = localStorage.getItem(SK);
@@ -914,14 +914,8 @@ function buildPrintableReport(year, yt, tax, allEntries, currentUser) {
 }
 
 // ─── DEFAULT DATA ────────────────────────────────────────────────────────────
-const DEFAULT_ROSTER = [
-  {id:"r1",name:"Bryan Bonilla",role:"Supervisor",position:"Supervisor",phone:"",email:"",pin:"0000",available:true,active:true,notes:"",tags:["supervisor"]},
-  {id:"r2",name:"Khalid Muhammed",role:"Crew",position:"Technician",phone:"",email:"",pin:"0000",available:true,active:true,notes:"",tags:[]},
-  {id:"r3",name:"Bryan Vasconez",role:"Crew",position:"Stagehand",phone:"",email:"",pin:"0000",available:true,active:true,notes:"",tags:[]},
-  {id:"r4",name:"Jonothan Vargas",role:"Crew",position:"Stagehand",phone:"",email:"",pin:"0000",available:true,active:true,notes:"",tags:[]},
-  {id:"r5",name:"Rich Graves",role:"Crew",position:"Driver",phone:"",email:"",pin:"0000",available:true,active:true,notes:"",tags:[]},
-  {id:"r6",name:"Vlad",role:"Crew",position:"Scissor Lift Op",phone:"",email:"",pin:"0000",available:true,active:true,notes:"",tags:[]},
-];
+// Real system starts with an empty roster — managers add crew through the app.
+const DEFAULT_ROSTER = [];
 
 // Role tags for crew on shifts (e.g. CC = Crew Captain, TECH = Technician, etc.)
 const DEFAULT_ROLE_TAGS = [
@@ -932,28 +926,10 @@ const DEFAULT_ROLE_TAGS = [
   {code:"SL OP", label:"Scissor Lift Op", color:"#F97316"},
 ];
 
-const DEFAULT_SHIFT = {
-  id:"s1", status:"active", pipelineStatus:null, requiredPositions:6,
-  date:"05/31/2026", callTime:"3:00 PM", endTime:"12:00 AM",
-  client:"Overland", location:"Spring Studios", address:"6 St Johns Ln, New York, NY 10013",
-  poc:"Bryan B.", pocPhone:"", notes:"Please don't be late and make sure you have ID's",
-  uniform:"Clean Big Crew T-Shirt / Black Jeans, Cargo or Regular All-Black Pants / Black Sneakers",
-  scope:["Deliver 60+ decks","Stage them for the following day","Build small stage for AV World ONLY","Remaining decks neatly stacked on designated floor – out of the way"],
-  crew:[
-    {id:"c1",rosterId:"r1",name:"Bryan Bonilla",role:"Supervisor",roleTag:"CC",email:"",phone:"",confirmed:false,confirmedAt:null,declined:false,declinedAt:null,clockIn:null,clockOut:null,absent:false,manualHours:null},
-    {id:"c2",rosterId:"r2",name:"Khalid Muhammed",role:"Crew",roleTag:"TECH",email:"",phone:"",confirmed:false,confirmedAt:null,declined:false,declinedAt:null,clockIn:null,clockOut:null,absent:false,manualHours:null},
-    {id:"c3",rosterId:"r3",name:"Bryan Vasconez",role:"Crew",roleTag:"SH",email:"",phone:"",confirmed:false,confirmedAt:null,declined:false,declinedAt:null,clockIn:null,clockOut:null,absent:false,manualHours:null},
-    {id:"c4",rosterId:"r4",name:"Jonothan Vargas",role:"Crew",roleTag:"SH",email:"",phone:"",confirmed:false,confirmedAt:null,declined:false,declinedAt:null,clockIn:null,clockOut:null,absent:false,manualHours:null},
-    {id:"c5",rosterId:"r5",name:"Rich Graves",role:"Crew",roleTag:"DRIVER",email:"",phone:"",confirmed:false,confirmedAt:null,declined:false,declinedAt:null,clockIn:null,clockOut:null,absent:false,manualHours:null},
-    {id:"c6",rosterId:"r6",name:"Vlad",role:"Crew",roleTag:"SL OP",email:"",phone:"",confirmed:false,confirmedAt:null,declined:false,declinedAt:null,clockIn:null,clockOut:null,absent:false,manualHours:null},
-  ],
-  announcements:[], tasks:[], generatedMsg:"", createdAt:now(), lastUpdated:now(), updatedBy:"",
-};
-
 const INIT = {
   roster: DEFAULT_ROSTER,
-  shifts: [DEFAULT_SHIFT],
-  activeShiftId: "s1",
+  shifts: [],
+  activeShiftId: null,
   notifications: [],
   // availability: { rosterId: { "2026-05-31": "available" | "unavailable" | "tentative" } }
   availability: {},
@@ -1545,7 +1521,7 @@ export default function App({ sessionUser = null }) {
   const [loaded, setLoaded] = useState(false);
   const [screen, setScreen] = useState("login"); // login | home | shift | admin | calendar | hours | availability | newshift | message
   const [currentUser, setCurrentUser] = useState(null); // {id, name, role:"manager"|"crew"}
-  const [activeShiftId, setActiveShiftId] = useState("s1");
+  const [activeShiftId, setActiveShiftId] = useState(null);
   // Single source of truth for dark/light across the WHOLE site (next-themes).
   const { theme, setTheme } = useTheme();
   const autoLoggedIn = useRef(false);
