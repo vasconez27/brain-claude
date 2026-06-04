@@ -55,12 +55,9 @@ export default function RegisterPage() {
       return;
     }
 
-    if (form.role === "MANAGER") {
-      router.push("/manager/dashboard");
-    } else {
-      // Crew must set a PIN next.
-      setStep("pin");
-    }
+    // Everyone — crew and managers — sets a PIN next, so one account
+    // can be signed into by password, PIN, or Google.
+    setStep("pin");
   }
 
   async function handlePin(e: React.FormEvent) {
@@ -83,7 +80,7 @@ export default function RegisterPage() {
       return;
     }
 
-    router.push("/crew/dashboard");
+    router.push(form.role === "MANAGER" ? "/manager/dashboard" : "/crew/dashboard");
   }
 
   return (
