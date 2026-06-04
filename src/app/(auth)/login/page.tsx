@@ -44,7 +44,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "#f8f8f8" }}>
+    <div className="min-h-screen flex items-center justify-center px-4 bg-[#f8f8f8] dark:bg-neutral-950">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');`}</style>
       <div className="w-full max-w-sm">
 
@@ -53,7 +53,7 @@ export default function LoginPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/bigcrewlogo.png" alt="BigCrew NY"
             style={{ width: 72, height: 72, objectFit: "contain", margin: "0 auto 14px" }} />
-          <h1 style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", fontSize: 30, letterSpacing: "0.12em", color: "#080808" }}>
+          <h1 style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", fontSize: 30, letterSpacing: "0.12em", color: "var(--foreground)" }}>
             BigCrew
           </h1>
           <p style={{ fontSize: 11, color: "#888", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 4 }}>
@@ -61,10 +61,10 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 shadow-sm p-6">
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-sm text-red-600 dark:text-red-400">
               {error}
             </div>
           )}
@@ -72,24 +72,24 @@ export default function LoginPage() {
           {/* Google */}
           <button
             onClick={() => signIn("google", { callbackUrl: "/post-login" })}
-            className="w-full flex items-center justify-center gap-3 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="w-full flex items-center justify-center gap-3 py-2.5 border border-gray-300 dark:border-neutral-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors"
           >
             <GoogleIcon />
             Continue with Google
           </button>
 
           <div className="flex items-center gap-3 my-4">
-            <div className="flex-1 h-px bg-gray-200" />
+            <div className="flex-1 h-px bg-gray-200 dark:bg-neutral-700" />
             <span className="text-xs text-gray-400">or</span>
-            <div className="flex-1 h-px bg-gray-200" />
+            <div className="flex-1 h-px bg-gray-200 dark:bg-neutral-700" />
           </div>
 
           {/* Tab switcher */}
-          <div className="flex gap-1 p-1 bg-gray-100 rounded-lg mb-4">
+          <div className="flex gap-1 p-1 bg-gray-100 dark:bg-neutral-800 rounded-lg mb-4">
             {(["email", "pin"] as Tab[]).map(t => (
               <button key={t} onClick={() => { setTab(t); setError(""); }}
                 className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  tab === t ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  tab === t ? "bg-white dark:bg-neutral-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                 }`}>
                 {t === "email" ? "Email & Password" : "PIN"}
               </button>
