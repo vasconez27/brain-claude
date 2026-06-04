@@ -84,26 +84,27 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "#f8f8f8" }}>
+    <div className="min-h-screen flex items-center justify-center px-4 bg-[#f8f8f8] dark:bg-neutral-950">
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');`}</style>
       <div className="w-full max-w-sm">
 
         {/* Branding */}
         <div className="text-center mb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/bigcrewlogo.png" alt="BigCrew NY"
+          <img src="/bigcrewlogo.png" alt="BigCrew NY" className="dark:invert"
             style={{ width: 72, height: 72, objectFit: "contain", margin: "0 auto 14px" }} />
-          <h1 style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", fontSize: 30, letterSpacing: "0.12em", color: "#080808" }}>
-            BALLIN
+          <h1 style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", fontSize: 30, letterSpacing: "0.12em", color: "var(--foreground)" }}>
+            BigCrew
           </h1>
           <p style={{ fontSize: 11, color: "#888", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 4 }}>
             {step === "account" ? "Create Account" : "Set Your PIN"}
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+        <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 shadow-sm p-6">
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-sm text-red-600 dark:text-red-400">
               {error}
             </div>
           )}
@@ -114,38 +115,38 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => signIn("google", { callbackUrl: "/post-login" })}
-                className="w-full flex items-center justify-center gap-3 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="w-full flex items-center justify-center gap-3 py-2.5 border border-gray-300 dark:border-neutral-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors"
               >
                 <GoogleIcon />
                 Sign up with Google
               </button>
 
               <div className="flex items-center gap-3 my-4">
-                <div className="flex-1 h-px bg-gray-200" />
+                <div className="flex-1 h-px bg-gray-200 dark:bg-neutral-700" />
                 <span className="text-xs text-gray-400">or create account</span>
-                <div className="flex-1 h-px bg-gray-200" />
+                <div className="flex-1 h-px bg-gray-200 dark:bg-neutral-700" />
               </div>
 
               <form onSubmit={handleAccount} className="space-y-3">
                 <input
                   type="text" placeholder="Full Name" value={form.name} required
                   onChange={e => set("name", e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  className="w-full px-3 py-2.5 border border-gray-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-300"
                 />
                 <input
                   type="email" placeholder="Email" value={form.email} required
                   onChange={e => set("email", e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  className="w-full px-3 py-2.5 border border-gray-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-300"
                 />
                 <input
                   type="tel" placeholder="Phone (for SMS)" value={form.phone}
                   onChange={e => set("phone", e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  className="w-full px-3 py-2.5 border border-gray-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-300"
                 />
                 <input
                   type="password" placeholder="Password (min 8 chars)" value={form.password} required minLength={8}
                   onChange={e => set("password", e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  className="w-full px-3 py-2.5 border border-gray-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-300"
                 />
 
                 {/* Role */}
@@ -156,8 +157,8 @@ export default function RegisterPage() {
                       onClick={() => set("role", r)}
                       className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors ${
                         form.role === r
-                          ? "bg-gray-900 text-white border-gray-900"
-                          : "bg-white text-gray-600 border-gray-300 hover:border-gray-500"
+                          ? "bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-gray-900 dark:border-white"
+                          : "bg-white text-gray-600 border-gray-300 hover:border-gray-500 dark:bg-neutral-800 dark:text-gray-300 dark:border-neutral-700 dark:hover:border-neutral-500"
                       }`}
                     >
                       {r === "CREW" ? "Crew Member" : "Manager"}
@@ -169,53 +170,53 @@ export default function RegisterPage() {
                   <input
                     type="text" placeholder="Manager Access Code" value={form.inviteCode} required
                     onChange={e => set("inviteCode", e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-100 dark:placeholder-gray-500 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-300"
                   />
                 )}
 
                 <button type="submit" disabled={loading}
-                  className="w-full py-2.5 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-gray-700 disabled:opacity-50 transition-colors">
+                  className="w-full py-2.5 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-gray-700 disabled:opacity-50 transition-colors dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
                   {loading ? "Creating…" : "Create Account"}
                 </button>
               </form>
 
               <p className="mt-5 text-center text-xs text-gray-400">
                 Already have an account?{" "}
-                <Link href="/login" className="text-gray-900 font-semibold hover:underline">Sign in</Link>
+                <Link href="/login" className="text-gray-900 dark:text-gray-100 font-semibold hover:underline">Sign in</Link>
               </p>
             </>
           )}
 
           {step === "pin" && (
             <>
-              <p className="text-sm text-gray-500 mb-4 text-center">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">
                 Set a quick-access PIN so you can sign in fast next time
               </p>
               <form onSubmit={handlePin} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
                     Choose PIN (4–6 digits)
                   </label>
                   <input
                     type="password" inputMode="numeric" placeholder="••••"
                     value={pin} maxLength={6} required autoFocus
                     onChange={e => setPin(e.target.value.replace(/\D/g, ""))}
-                    className="w-full px-3 py-3 border border-gray-300 rounded-lg text-center text-2xl tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-gray-900"
+                    className="w-full px-3 py-3 border border-gray-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-100 rounded-lg text-center text-2xl tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-300"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">
                     Confirm PIN
                   </label>
                   <input
                     type="password" inputMode="numeric" placeholder="••••"
                     value={pinConfirm} maxLength={6} required
                     onChange={e => setPinConfirm(e.target.value.replace(/\D/g, ""))}
-                    className="w-full px-3 py-3 border border-gray-300 rounded-lg text-center text-2xl tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-gray-900"
+                    className="w-full px-3 py-3 border border-gray-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-gray-100 rounded-lg text-center text-2xl tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-300"
                   />
                 </div>
                 <button type="submit" disabled={loading}
-                  className="w-full py-3 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-gray-700 disabled:opacity-50 transition-colors">
+                  className="w-full py-3 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-gray-700 disabled:opacity-50 transition-colors dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
                   {loading ? "Saving…" : "Set PIN & Enter"}
                 </button>
               </form>
