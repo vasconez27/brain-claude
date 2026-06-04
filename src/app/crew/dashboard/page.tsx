@@ -4,100 +4,129 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { format } from "date-fns";
 
+const mono = "'DM Mono','Courier New',monospace";
+const head = "'Bebas Neue','Arial Black',sans-serif";
+
 export default async function CrewDashboard() {
   const session = await getServerSession(authOptions);
-
   const now = new Date();
   const weekEnd = new Date(now);
   weekEnd.setDate(now.getDate() + 7);
 
-  const [upcomingAssignments, totalHoursThisMonth, pendingAssignments] = await Promise.all([
-    prisma.shiftAssignment.findMany({
-      where: {
-        userId: session!.user.id,
-        status: "CONFIRMED",
-        shift: { startTime: { gte: now, lte: weekEnd } },
-      },
+  const [nextShift, pendingAssignments, allUpcoming] = await Promise.all([
+    prisma.shiftAssignment.findFirst({
+      where: { userId: session!.user.id, status: "CONFIRMED", shift: { startTime: { gte: now } } },
       include: { shift: true },
       orderBy: { shift: { startTime: "asc" } },
-      take: 5,
-    }),
-    prisma.shiftAssignment.aggregate({
-      where: {
-        userId: session!.user.id,
-        status: "CONFIRMED",
-        shift: { startTime: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
-      },
-      _sum: { hoursWorked: true },
     }),
     prisma.shiftAssignment.findMany({
       where: { userId: session!.user.id, status: "PENDING" },
       include: { shift: true },
       orderBy: { shift: { startTime: "asc" } },
-      take: 5,
+    }),
+    prisma.shiftAssignment.findMany({
+      where: { userId: session!.user.id, shift: { startTime: { gte: now } } },
+      include: { shift: true },
+      orderBy: { shift: { startTime: "asc" } },
+      take: 8,
     }),
   ]);
 
+  const lbl: React.CSSProperties = { fontFamily: mono, fontSize: 9, color: "#6a6a6a", letterSpacing: "0.2em", textTransform: "uppercase" };
+  const card = (extra?: React.CSSProperties): React.CSSProperties => ({
+    background: "#151517", border: "1px solid #2c2c30", borderRadius: 10, padding: "14px 16px", ...extra,
+  });
+
+  const navCards = [
+    { label: "Schedule",     icon: "📅", href: "/crew/schedule",  color: "#60a5fa" },
+    { label: "Hours & Pay",  icon: "⏱",  href: "/crew/hours",     color: "#34d399" },
+    { label: "Expenses & Tax", icon: "💰", href: "/crew/taxes",   color: "#f97316" },
+  ];
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">My Dashboard</h1>
-      <p className="text-gray-500 mb-8">Welcome back, {session?.user.name}</p>
+    <div style={{ fontFamily: mono, color: "#ededed" }}>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <div className="p-5 rounded-xl border bg-blue-50 text-blue-700 border-blue-200">
-          <p className="text-3xl font-bold">{upcomingAssignments.length}</p>
-          <p className="text-sm font-medium mt-1">Shifts This Week</p>
-        </div>
-        <div className="p-5 rounded-xl border bg-green-50 text-green-700 border-green-200">
-          <p className="text-3xl font-bold">{(totalHoursThisMonth._sum.hoursWorked ?? 0).toFixed(1)}</p>
-          <p className="text-sm font-medium mt-1">Hours This Month</p>
-        </div>
-        <div className="p-5 rounded-xl border bg-yellow-50 text-yellow-700 border-yellow-200">
-          <p className="text-3xl font-bold">{pendingAssignments.length}</p>
-          <p className="text-sm font-medium mt-1">Shifts to Confirm</p>
-        </div>
-      </div>
-
+      {/* Pending confirmation alert */}
       {pendingAssignments.length > 0 && (
-        <div className="bg-white rounded-xl border border-yellow-200 p-6 mb-6">
-          <h2 className="font-semibold text-gray-900 mb-4">Action Required — Confirm Shifts</h2>
-          <div className="space-y-3">
-            {pendingAssignments.map((a) => (
-              <div key={a.id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{a.shift.title}</p>
-                  <p className="text-xs text-gray-500">
-                    {format(new Date(a.shift.startTime), "EEE, MMM d • h:mm a")} — ${a.shift.payRate}/hr
-                  </p>
+        <div style={{ background: "#1e1e10", border: "1px solid #3a3a10", borderRadius: 10, padding: "12px 16px", marginBottom: 14 }}>
+          <div style={{ ...lbl, color: "#e8c84a", marginBottom: 6 }}>⚡ Action Required</div>
+          {pendingAssignments.map(a => (
+            <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#ededed" }}>{a.shift.title}</div>
+                <div style={{ fontSize: 10, color: "#9a9a9a", marginTop: 2 }}>
+                  {format(new Date(a.shift.startTime), "EEE, MMM d · h:mm a")} · ${a.shift.payRate}/hr
                 </div>
-                <Link href="/crew/schedule"
-                  className="text-xs font-medium text-blue-600 hover:underline">Review</Link>
               </div>
-            ))}
-          </div>
+              <Link href="/crew/schedule" style={{ fontFamily: mono, fontSize: 10, letterSpacing: "0.1em", color: "#e8c84a", textDecoration: "none", border: "1px solid #e8c84a", borderRadius: 5, padding: "4px 8px" }}>
+                REVIEW →
+              </Link>
+            </div>
+          ))}
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="font-semibold text-gray-900 mb-4">Upcoming Shifts</h2>
-        {upcomingAssignments.length === 0 ? (
-          <p className="text-sm text-gray-400">No confirmed shifts in the next 7 days.</p>
-        ) : (
-          <div className="space-y-3">
-            {upcomingAssignments.map((a) => (
-              <div key={a.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{a.shift.title}</p>
-                  <p className="text-xs text-gray-500">
-                    {format(new Date(a.shift.startTime), "EEE, MMM d • h:mm a")}
-                    {a.shift.location && ` • ${a.shift.location}`}
-                  </p>
-                </div>
-                <span className="text-xs font-semibold text-green-600">${a.shift.payRate}/hr</span>
-              </div>
-            ))}
+      {/* Next shift hero */}
+      {nextShift ? (
+        <div style={{ background: "linear-gradient(135deg,#1e1e10,#0a0a00)", border: "1.5px solid #e8c84a", borderRadius: 12, padding: "18px 18px 14px", marginBottom: 14 }}>
+          <div style={lbl}>Your Next Shift</div>
+          <div style={{ fontFamily: head, fontSize: 28, letterSpacing: "0.06em", color: "#e8c84a", lineHeight: 1, marginTop: 6, marginBottom: 4 }}>
+            {nextShift.shift.title.toUpperCase()}
           </div>
-        )}
+          <div style={{ fontSize: 11, color: "#9a9a9a" }}>
+            {format(new Date(nextShift.shift.startTime), "EEEE, MMMM d · h:mm a")}
+            {nextShift.shift.location && ` · 📍 ${nextShift.shift.location}`}
+          </div>
+          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+            <span style={{ fontFamily: mono, fontSize: 9, letterSpacing: "0.12em", background: "#34d39922", color: "#34d399", border: "1px solid #34d39944", borderRadius: 4, padding: "3px 8px" }}>
+              CONFIRMED
+            </span>
+            <span style={{ fontFamily: mono, fontSize: 9, letterSpacing: "0.12em", background: "#1d1d20", color: "#9a9a9a", border: "1px solid #2c2c30", borderRadius: 4, padding: "3px 8px" }}>
+              ${nextShift.shift.payRate}/hr
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div style={{ ...card({ marginBottom: 14, textAlign: "center", padding: "28px 16px" }) }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>📭</div>
+          <div style={{ fontSize: 12, color: "#6a6a6a" }}>No upcoming confirmed shifts.</div>
+        </div>
+      )}
+
+      {/* Quick nav grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 14 }}>
+        {navCards.map(n => (
+          <Link key={n.label} href={n.href} style={{ ...card({ textDecoration: "none", display: "block", padding: "16px 14px", cursor: "pointer" }) }}>
+            <div style={{ fontSize: 22, marginBottom: 8 }}>{n.icon}</div>
+            <div style={{ fontFamily: mono, fontSize: 10, fontWeight: 700, color: n.color, letterSpacing: "0.08em" }}>{n.label.toUpperCase()}</div>
+          </Link>
+        ))}
+      </div>
+
+      {/* All upcoming shifts */}
+      <div style={lbl}>All Shifts</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+        {allUpcoming.length === 0 ? (
+          <div style={{ ...card(), fontSize: 11, color: "#6a6a6a" }}>No upcoming shifts assigned.</div>
+        ) : allUpcoming.map(a => (
+          <div key={a.id} style={{ ...card({ display: "flex", justifyContent: "space-between", alignItems: "center" }) }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#ededed" }}>{a.shift.title}</div>
+              <div style={{ fontSize: 10, color: "#9a9a9a", marginTop: 3 }}>
+                {format(new Date(a.shift.startTime), "EEE, MMM d · h:mm a")}
+                {a.shift.location && ` · ${a.shift.location}`}
+              </div>
+            </div>
+            <span style={{
+              fontFamily: mono, fontSize: 9, letterSpacing: "0.12em", borderRadius: 4, padding: "3px 8px",
+              background: a.status === "CONFIRMED" ? "#34d39922" : a.status === "DECLINED" ? "#f8717122" : "#e8c84a22",
+              color: a.status === "CONFIRMED" ? "#34d399" : a.status === "DECLINED" ? "#f87171" : "#e8c84a",
+              border: `1px solid ${a.status === "CONFIRMED" ? "#34d39944" : a.status === "DECLINED" ? "#f8717144" : "#e8c84a44"}`,
+            }}>
+              {a.status}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
