@@ -1,16 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 
 // Floating sun/moon button — flips the whole app between light and dark.
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
 
   // Avoid hydration mismatch — theme is only known on the client.
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
+
+  // The dashboards render BigCrewApp, which has its own theme toggle — don't double up.
+  if (pathname?.startsWith("/crew") || pathname?.startsWith("/manager")) return null;
 
   const dark = theme === "dark";
 

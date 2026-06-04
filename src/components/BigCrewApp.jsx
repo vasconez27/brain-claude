@@ -1539,13 +1539,14 @@ function HoursAdjustModal({member, shiftClient, onSave, onClose}) {
 // ══════════════════════════════════════════════════════════════════════════════
 // MAIN APP
 // ══════════════════════════════════════════════════════════════════════════════
-export default function App() {
+export default function App({ sessionUser = null }) {
   const [state, setState] = useState(INIT);
   const [loaded, setLoaded] = useState(false);
   const [screen, setScreen] = useState("login"); // login | home | shift | admin | calendar | hours | availability | newshift | message
   const [currentUser, setCurrentUser] = useState(null); // {id, name, role:"manager"|"crew"}
   const [activeShiftId, setActiveShiftId] = useState("s1");
   const [theme, setTheme] = useState("light");
+  const autoLoggedIn = useRef(false);
 
   // Apply theme synchronously before paint, and on every change persist it.
   useEffect(()=>{
@@ -1563,6 +1564,29 @@ export default function App() {
       setLoaded(true);
     });
   },[]);
+
+  // Auto-login from the real NextAuth session — skips the demo's own login
+  // screen entirely. Role decides which portal opens (manager vs crew).
+  useEffect(()=>{
+    if(!sessionUser || !loaded || autoLoggedIn.current) return;
+    if(sessionUser.role === "manager"){
+      setCurrentUser({ id:"manager", name:sessionUser.name || "Manager", role:"manager" });
+    } else {
+      // Try to match a roster member by name; otherwise use a synthetic crew id.
+      const match = state.roster?.find(m => (m.name||"").toLowerCase() === (sessionUser.name||"").toLowerCase());
+      if(match) setCurrentUser({ id:match.id, name:match.name, role:"crew", rosterId:match.id });
+      else setCurrentUser({ id:"me", name:sessionUser.name || "Crew", role:"crew", rosterId:"me" });
+    }
+    autoLoggedIn.current = true;
+    setScreen("home");
+  },[sessionUser, loaded, state.roster]);
+
+  // When a session-gated user logs out of the demo, run the real sign-out.
+  useEffect(()=>{
+    if(sessionUser && autoLoggedIn.current && !currentUser){
+      window.location.href = "/api/auth/signout?callbackUrl=/login";
+    }
+  },[currentUser, sessionUser]);
 
   const persist = useCallback((newState) => {
     setState(newState);
@@ -1587,10 +1611,12 @@ export default function App() {
   const activeShift = state.shifts.find(s=>s.id===activeShiftId) || state.shifts[0];
 
   if(!loaded) return <Spinner/>;
+  // Gated by real auth: wait for auto-login instead of flashing the demo login.
+  if(sessionUser && !currentUser) return <Spinner/>;
 
   // Route → compute the active screen, then wrap with the theme toggle.
   let body;
-  if(screen==="login" || !currentUser) body = <LoginScreen state={state} setCurrentUser={setCurrentUser} setScreen={setScreen}/>;
+  if(screen==="login" || !currentUser) body = sessionUser ? <Spinner/> : <LoginScreen state={state} setCurrentUser={setCurrentUser} setScreen={setScreen}/>;
   else if(screen==="calendar"||screen==="schedule") body = <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="calendar"/>;
   else if(screen==="weekgrid") body = <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="week"/>;
   else if(screen==="availability") body = <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="avail"/>;
