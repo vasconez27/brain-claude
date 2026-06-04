@@ -4,17 +4,29 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTheme } from "next-themes";
 
 // ─── STORAGE ─────────────────────────────────────────────────────────────────
-const SK = "bigcrew_v11";
+// Backed by the shared /api/workspace document (Postgres) so every device sees
+// the same live schedule. Falls back to null on any error → app shows empty state.
 async function load() {
   try {
-    const r = localStorage.getItem(SK);
-    return r ? JSON.parse(r) : null;
+    const res = await fetch("/api/workspace", { cache: "no-store" });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j?.data ?? null;
   } catch { return null; }
 }
+// Writes are serialized through a promise chain so rapid saves land in order
+// (last write wins) instead of racing each other to the server.
+let _saveChain = Promise.resolve();
 async function save(d) {
-  try {
-    localStorage.setItem(SK, JSON.stringify(d));
-  } catch(e) { console.error(e); }
+  const body = JSON.stringify(d);
+  _saveChain = _saveChain
+    .then(() => fetch("/api/workspace", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body,
+    }))
+    .catch(e => console.error(e));
+  return _saveChain;
 }
 
 // ─── THEME ───────────────────────────────────────────────────────────────────

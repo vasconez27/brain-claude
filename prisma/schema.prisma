@@ -115,6 +115,15 @@ model Message {
   sender User @relation(fields: [senderId], references: [id])
 }
 
+// Single shared document holding the BigCrew dashboard state (roster, shifts,
+// availability, expenses, etc.). One row per company — everyone reads/writes it,
+// so all devices see the same live schedule.
+model Workspace {
+  id        String   @id
+  data      Json
+  updatedAt DateTime @updatedAt
+}
+
 model Expense {
   id          String   @id @default(cuid())
   userId      String
