@@ -4554,13 +4554,27 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
   function deleteMember(id){
     if(!confirm("Permanently delete this crew member from the roster?")) return;
     const member = state.roster.find(r=>r.id===id);
-    // If this person has a real account, tombstone their user id so the
-    // server-side merge won't re-add them on the next sync.
-    const removedUserIds = member?.userId
-      ? [...new Set([...(state.removedUserIds||[]), member.userId])]
-      : (state.removedUserIds||[]);
+    // If this person has a real account, tombstone {id,name} so the server-side
+    // merge won't re-add them on the next sync — and we can offer a restore.
+    let removedUserIds = state.removedUserIds||[];
+    if(member?.userId){
+      removedUserIds = [
+        ...removedUserIds.filter(x => (typeof x==="string"?x:x.id) !== member.userId),
+        {id: member.userId, name: member.name || "Crew member"},
+      ];
+    }
     persist({...state, roster:state.roster.filter(r=>r.id!==id), removedUserIds});
     setProfileId(null);
+  }
+  function restoreRemoved(item){
+    const userId = typeof item==="string" ? item : item.id;
+    const name = typeof item==="string" ? "Crew member" : (item.name || "Crew member");
+    const removedUserIds = (state.removedUserIds||[]).filter(x => (typeof x==="string"?x:x.id) !== userId);
+    // Optimistically re-add a minimal entry; the next sync fills email/phone.
+    const exists = state.roster.some(r => r.userId===userId || r.id===userId);
+    const roster = exists ? state.roster
+      : [...state.roster, {id:userId, userId, name, role:"Crew", position:"Crew", phone:"", email:"", available:true, active:true, notes:"", tags:[], source:"account"}];
+    persist({...state, roster, removedUserIds});
   }
 
   // Filter + sort
@@ -4599,6 +4613,27 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
           background:showArchived?C.s3:"transparent",color:showArchived?C.text:C.dim,border:`1px solid ${C.border}`,
         }}>{showArchived?"◉ Archived":"○ Show Archived"}</button>
       </div>
+
+      {/* Removed crew — restore */}
+      {(state.removedUserIds||[]).length > 0 && (
+        <div style={{...card({border:`1px solid ${C.border}`,marginBottom:"10px"})}}>
+          <span style={lbl}>🗑 Removed Crew ({(state.removedUserIds||[]).length})</span>
+          <div style={{fontSize:"10px",color:C.muted,marginTop:"2px",marginBottom:"8px"}}>
+            These accounts were removed from the roster. Restore to bring them back.
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+            {(state.removedUserIds||[]).map((item,i)=>{
+              const name = typeof item==="string" ? "Crew member" : (item.name||"Crew member");
+              return (
+                <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:C.s2,borderRadius:"7px"}}>
+                  <span style={{fontSize:"12px",color:C.text}}>{name}</span>
+                  <button onClick={()=>restoreRemoved(item)} style={{...btn("ghost"),padding:"5px 10px",fontSize:"10px",border:`1px solid ${C.green}`,color:C.green}}>↩ RESTORE</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Add form */}
       {adding && (

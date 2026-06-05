@@ -30,7 +30,12 @@ export async function GET() {
     : [];
 
   // Accounts the manager explicitly removed from the roster — don't re-add them.
-  const removed = new Set(Array.isArray(data.removedUserIds) ? (data.removedUserIds as string[]) : []);
+  // Entries may be a bare id string or {id, name}.
+  const removed = new Set(
+    (Array.isArray(data.removedUserIds) ? data.removedUserIds : [])
+      .map((x: unknown) => (typeof x === "string" ? x : (x as { id?: string })?.id))
+      .filter(Boolean) as string[]
+  );
 
   for (const u of crewUsers) {
     if (removed.has(u.id)) continue;
