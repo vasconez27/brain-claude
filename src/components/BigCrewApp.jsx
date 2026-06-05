@@ -1560,12 +1560,12 @@ function HoursAdjustModal({member, shiftClient, onSave, onClose}) {
         {/* Breakdown */}
         <div style={{background:C.s2,borderRadius:"7px",padding:"10px",marginBottom:"14px"}}>
           <div style={{display:"flex",justifyContent:"space-between",padding:"3px 0",fontSize:"11px"}}>
-            <span style={{color:C.muted}}>Regular (up to {OT_THRESHOLD_HOURS}h)</span>
+            <span style={{color:C.muted}}>Regular</span>
             <span style={{color:C.text,fontWeight:"700"}}>{fmtHours(reg)}</span>
           </div>
           {ot > 0 && (
             <div style={{display:"flex",justifyContent:"space-between",padding:"3px 0",fontSize:"11px"}}>
-              <span style={{color:C.gold}}>Overtime (over {OT_THRESHOLD_HOURS}h)</span>
+              <span style={{color:C.gold}}>Overtime</span>
               <span style={{color:C.gold,fontWeight:"700"}}>{fmtHours(ot)}</span>
             </div>
           )}
@@ -2338,7 +2338,7 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state}) {
       {/* Notes */}
       <div style={{background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"10px",padding:"12px",display:"flex",gap:"10px"}}>
         <span style={{fontSize:"18px"}}>⚠️</span>
-        <div style={{fontSize:"12px",color:"#d4cfbf",lineHeight:"1.6"}}>{shift.notes}</div>
+        <div style={{fontSize:"12px",color:C.text,lineHeight:"1.6"}}>{shift.notes}</div>
       </div>
       {/* Details */}
       {[
@@ -2371,14 +2371,14 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state}) {
         {shift.scope.map((item,i)=>(
           <div key={i} style={{display:"flex",gap:"10px",alignItems:"flex-start",marginTop:"8px"}}>
             <div style={{width:"18px",height:"18px",background:C.greenBg,border:`1px solid ${C.green}`,borderRadius:"4px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",color:C.green,flexShrink:0}}>✓</div>
-            <div style={{fontSize:"12px",color:"#c8d4c4",lineHeight:"1.5"}}>{item}</div>
+            <div style={{fontSize:"12px",color:C.text,lineHeight:"1.5"}}>{item}</div>
           </div>
         ))}
       </div>
       {/* Uniform */}
       <div style={{...card({background:C.s2,border:`1px solid ${C.borderHi}`})}} >
         <span style={lbl}>👕 Uniform</span>
-        <div style={{fontSize:"12px",color:"#c8c4d4",lineHeight:"1.6"}}>{shift.uniform}</div>
+        <div style={{fontSize:"12px",color:C.text,lineHeight:"1.6"}}>{shift.uniform}</div>
       </div>
       {/* Crew List */}
       <div style={card()}>
@@ -2940,8 +2940,8 @@ function HoursScreen({state,persist,updateShift,setScreen,currentUser,activeShif
                     )}
                     <div style={{marginTop:"8px"}}>
                       <button onClick={()=>{setAdjustingMember(e.crew);setAdjustingShift(e.shift);}}
-                        style={{...btn("ghost"),padding:"5px 10px",fontSize:"10px",border:`1px solid ${C.border}`,color:C.muted}}>
-                        ✏ ADJUST HOURS
+                        style={{...btn("ghost"),padding:"6px 12px",fontSize:"10px",border:`1px solid ${C.gold}`,color:C.gold}}>
+                        ✎ ENTER / EDIT HOURS
                       </button>
                     </div>
                   </div>
@@ -5376,8 +5376,137 @@ function PageHeader({title,sub,onBack}) {
 const IRS_MILEAGE_RATE = 0.70; // 2025/2026 IRS standard mileage rate $/mile
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const CATS = ["General","Food & Meals","Transportation","Supplies","Equipment","Parking","Tolls","Other"];
+const CAT_COLORS = {
+  "General":"#6b7280", "Food & Meals":"#F97316", "Transportation":"#1f6fd6",
+  "Supplies":"#6d4fd0", "Equipment":"#0a8f5b", "Parking":"#d83a3a",
+  "Tolls":"#E8C84A", "Other":"#0ea5e9",
+};
+const catColor = (c) => CAT_COLORS[c] || "#6b7280";
 
 function fmtMoney(n) { return `$${parseFloat(n||0).toFixed(2)}`; }
+
+// Colored category picker — a block showing the current category that opens a
+// dropdown of color-coded options.
+function CategoryDropdown({value, onChange}) {
+  const [open, setOpen] = useState(false);
+  const color = catColor(value);
+  return (
+    <div style={{position:"relative"}}>
+      <button type="button" onClick={()=>setOpen(o=>!o)} style={{
+        display:"flex",alignItems:"center",gap:"8px",width:"100%",boxSizing:"border-box",
+        background:color+"22",border:`1.5px solid ${color}`,borderRadius:"8px",
+        padding:"10px 12px",cursor:"pointer",fontFamily:C.font,
+      }}>
+        <span style={{width:"13px",height:"13px",borderRadius:"3px",background:color,flexShrink:0}}/>
+        <span style={{flex:1,textAlign:"left",fontSize:"13px",fontWeight:"700",color:C.text}}>{value}</span>
+        <span style={{color:C.muted,fontSize:"11px",transform:open?"rotate(180deg)":"none",transition:"transform 0.15s"}}>▼</span>
+      </button>
+      {open && (
+        <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:"4px",background:C.s2,border:`1px solid ${C.borderHi}`,borderRadius:"8px",zIndex:200,overflow:"hidden",boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}>
+          {CATS.map(c=>{
+            const cc=catColor(c);
+            return (
+              <div key={c} onClick={()=>{onChange(c);setOpen(false);}} style={{
+                display:"flex",alignItems:"center",gap:"8px",padding:"10px 12px",cursor:"pointer",
+                background:c===value?cc+"22":"transparent",
+              }}
+                onMouseEnter={e=>e.currentTarget.style.background=cc+"22"}
+                onMouseLeave={e=>e.currentTarget.style.background=c===value?cc+"22":"transparent"}>
+                <span style={{width:"13px",height:"13px",borderRadius:"3px",background:cc,flexShrink:0}}/>
+                <span style={{fontSize:"13px",color:C.text,fontWeight:c===value?"700":"500"}}>{c}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Edit an existing expense entry (Monthly tab → Edit).
+function ExpenseEditModal({entry, onSave, onClose}) {
+  const [f, setF] = useState({
+    date: entry.date,
+    items: entry.items && entry.items.length ? entry.items.map(String) : [""],
+    paid: entry.paid ? String(entry.paid) : "",
+    mileage: entry.mileage ? String(entry.mileage) : "",
+    category: entry.category || "General",
+    notes: entry.notes || "",
+  });
+  const setItem=(i,v)=>setF(s=>{const items=[...s.items];items[i]=v;return{...s,items};});
+  const addItem=()=>setF(s=>({...s,items:[...s.items,""]}));
+  const removeItem=(i)=>setF(s=>({...s,items:s.items.filter((_,j)=>j!==i)}));
+  const total=f.items.reduce((a,x)=>a+parseFloat(x||0),0);
+
+  function save(){
+    const validItems=f.items.filter(x=>String(x).trim()&&!isNaN(parseFloat(x))).map(x=>parseFloat(x));
+    if(!f.date||validItems.length===0) return;
+    onSave({
+      date:f.date, items:validItems,
+      paid:f.paid?parseFloat(f.paid):0,
+      mileage:f.mileage?parseFloat(f.mileage):0,
+      category:f.category, notes:f.notes,
+    });
+  }
+
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px",overflowY:"auto"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.s1,border:`1.5px solid #F97316`,borderRadius:"12px",padding:"20px",maxWidth:"440px",width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{fontFamily:C.head,fontSize:"22px",letterSpacing:"0.08em",color:"#F97316",marginBottom:"14px"}}>EDIT ENTRY</div>
+
+        <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+          <div>
+            <span style={lbl}>Date *</span>
+            <input type="date" value={f.date} onChange={e=>setF(s=>({...s,date:e.target.value}))} style={{...inp,marginTop:"4px"}}/>
+          </div>
+
+          <div>
+            <span style={lbl}>Expense Amounts *</span>
+            <div style={{display:"flex",flexDirection:"column",gap:"6px",marginTop:"6px"}}>
+              {f.items.map((item,i)=>(
+                <div key={i} style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                  <span style={{color:C.muted,fontSize:"13px",flexShrink:0}}>$</span>
+                  <input type="number" step="0.01" min="0" value={item} onChange={e=>setItem(i,e.target.value)} placeholder="0.00" style={{...inp,flex:1,textAlign:"right"}}/>
+                  {f.items.length>1&&<button onClick={()=>removeItem(i)} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:"6px",color:C.red,cursor:"pointer",fontSize:"13px",padding:"6px 10px",fontFamily:C.font}}>✕</button>}
+                </div>
+              ))}
+              {f.items.length>1&&<div style={{textAlign:"right",fontSize:"12px",color:"#F97316",fontWeight:"700"}}>= {fmtMoney(total)}</div>}
+              <button onClick={addItem} style={{...btn("ghost",true),border:`1px dashed ${C.border}`,padding:"8px",fontSize:"11px"}}>+ Add Receipt</button>
+            </div>
+          </div>
+
+          <div>
+            <span style={lbl}>Category</span>
+            <div style={{marginTop:"4px"}}><CategoryDropdown value={f.category} onChange={c=>setF(s=>({...s,category:c}))}/></div>
+          </div>
+
+          <div>
+            <span style={lbl}>Amount Paid to You</span>
+            <div style={{display:"flex",gap:"6px",alignItems:"center",marginTop:"4px"}}>
+              <span style={{color:C.muted,fontSize:"13px",flexShrink:0}}>$</span>
+              <input type="number" step="0.01" min="0" value={f.paid} onChange={e=>setF(s=>({...s,paid:e.target.value}))} placeholder="0.00" style={{...inp,textAlign:"right",border:`1px solid ${C.green}`,flex:1}}/>
+            </div>
+          </div>
+
+          <div>
+            <span style={lbl}>Mileage (optional)</span>
+            <input type="number" step="0.1" min="0" value={f.mileage} onChange={e=>setF(s=>({...s,mileage:e.target.value}))} placeholder="0" style={{...inp,marginTop:"4px",textAlign:"right"}}/>
+          </div>
+
+          <div>
+            <span style={lbl}>Notes (optional — paste anything)</span>
+            <textarea value={f.notes} onChange={e=>setF(s=>({...s,notes:e.target.value}))} placeholder="Paste or type notes…" style={{...inp,marginTop:"4px",minHeight:"60px",resize:"vertical"}}/>
+          </div>
+
+          <div style={{display:"flex",gap:"8px",marginTop:"4px"}}>
+            <button onClick={onClose} style={{...btn("ghost"),flex:1,border:`1px solid ${C.border}`}}>CANCEL</button>
+            <button onClick={save} disabled={!f.date||f.items.every(x=>!String(x).trim())} style={{...btn("gold"),flex:1.4,opacity:(!f.date||f.items.every(x=>!String(x).trim()))?0.4:1}}>SAVE CHANGES</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Format one entry in the requested ledger style
 // e.g. "3/23 $22.28+$11.86=$34.14 [paid $171.00]"
@@ -5415,6 +5544,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
     notes: "",
   });
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(null); // entry being edited (Monthly tab)
 
   // Get entries for the viewed user
   const allEntries = (state.expenses||[]).filter(e=>e.userId===viewUserId);
@@ -5461,6 +5591,11 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
 
   function deleteEntry(id) {
     persist({...state, expenses:(state.expenses||[]).filter(e=>e.id!==id)});
+  }
+
+  function updateEntry(id, patch) {
+    persist({...state, expenses:(state.expenses||[]).map(e=>e.id===id?{...e,...patch}:e)});
+    setEditing(null);
   }
 
   // Monthly totals
@@ -5562,17 +5697,9 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
               <div style={{fontSize:"11px",color:"#F97316",fontWeight:"700",letterSpacing:"0.12em",marginBottom:"12px"}}>NEW ENTRY</div>
               <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
 
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
-                  <div>
-                    <span style={lbl}>Date *</span>
-                    <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px"}}/>
-                  </div>
-                  <div>
-                    <span style={lbl}>Category</span>
-                    <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))} style={{...inp,marginTop:"4px",appearance:"none"}}>
-                      {CATS.map(c=><option key={c}>{c}</option>)}
-                    </select>
-                  </div>
+                <div>
+                  <span style={lbl}>Date *</span>
+                  <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px"}}/>
                 </div>
 
                 {/* Expense items */}
@@ -5597,6 +5724,14 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                       </div>
                     )}
                     <button onClick={addItem} style={{...btn("ghost",true),border:`1px dashed ${C.border}`,padding:"8px",fontSize:"11px"}}>+ Add Receipt</button>
+                  </div>
+                </div>
+
+                {/* Category — colored picker right after the amounts */}
+                <div>
+                  <span style={lbl}>Category</span>
+                  <div style={{marginTop:"4px"}}>
+                    <CategoryDropdown value={form.category} onChange={c=>setForm(f=>({...f,category:c}))}/>
                   </div>
                 </div>
 
@@ -5626,10 +5761,12 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                   <div style={{fontSize:"9px",color:C.dim,marginTop:"4px"}}>IRS rate ${IRS_MILEAGE_RATE}/mile · deductible for 1099 contractors</div>
                 </div>
 
-                {/* Notes */}
+                {/* Notes — paste block */}
                 <div>
-                  <span style={lbl}>Notes (optional)</span>
-                  <input value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="e.g. Spring Studios job" style={{...inp,marginTop:"4px"}}/>
+                  <span style={lbl}>Notes (optional — paste anything)</span>
+                  <textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))}
+                    placeholder="Paste or type — receipts, vendor, job name, anything. Line breaks are kept."
+                    style={{...inp,marginTop:"4px",minHeight:"70px",resize:"vertical"}}/>
                 </div>
 
                 <button onClick={saveEntry}
@@ -5717,7 +5854,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                           <div style={{flex:1}}>
                             <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
                               <span style={{fontSize:"13px",fontWeight:"700",color:"#F97316"}}>{new Date(e.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>
-                              <span style={badge("#F97316","#1a0c00")}>{e.category}</span>
+                              <span style={badge(catColor(e.category), catColor(e.category)+"22")}>{e.category}</span>
                             </div>
                             {/* Items breakdown */}
                             <div style={{fontFamily:"'Courier New',monospace",fontSize:"12px",color:C.text,marginBottom:"4px"}}>
@@ -5736,6 +5873,11 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                             <div style={{fontSize:"14px",fontWeight:"700",color:parseFloat(e.paid)-total>=0?C.green:C.red}}>{fmtMoney(parseFloat(e.paid)-total)}</div>
                             <div style={{fontSize:"9px",color:C.muted}}>net</div>
                           </div>
+                        </div>
+                        {/* Per-entry actions */}
+                        <div style={{marginTop:"10px",display:"flex",gap:"6px"}}>
+                          <button onClick={()=>setEditing(e)} style={{...btn("ghost"),flex:1,padding:"7px",fontSize:"10px",border:`1px solid ${C.gold}`,color:C.gold}}>✎ EDIT</button>
+                          <button onClick={()=>deleteEntry(e.id)} style={{...btn("ghost"),flex:1,padding:"7px",fontSize:"10px",border:`1px solid ${C.border}`,color:C.muted}}>🗑 DELETE</button>
                         </div>
                       </div>
                     );
@@ -5927,6 +6069,14 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
           </div>
         )}
       </div>
+
+      {editing && (
+        <ExpenseEditModal
+          entry={editing}
+          onSave={(patch)=>updateEntry(editing.id, patch)}
+          onClose={()=>setEditing(null)}
+        />
+      )}
     </div>
   );
 }
