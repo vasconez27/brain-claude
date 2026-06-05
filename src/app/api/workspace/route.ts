@@ -29,7 +29,11 @@ export async function GET() {
     ? [...(data.roster as Record<string, unknown>[])]
     : [];
 
+  // Accounts the manager explicitly removed from the roster — don't re-add them.
+  const removed = new Set(Array.isArray(data.removedUserIds) ? (data.removedUserIds as string[]) : []);
+
   for (const u of crewUsers) {
+    if (removed.has(u.id)) continue;
     const emailLc = (u.email ?? "").toLowerCase();
     const idx = roster.findIndex(r =>
       r.userId === u.id ||

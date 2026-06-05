@@ -1033,6 +1033,9 @@ const INIT = {
   expenses: [],
   // Manager-added custom role tags beyond the defaults
   customRoleTags: [],
+  // Account user IDs the manager has removed from the roster — the server-side
+  // merge skips these so a deleted crew member doesn't auto-reappear.
+  removedUserIds: [],
 };
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
@@ -1696,7 +1699,7 @@ export default function App({ sessionUser = null }) {
 
   const persist = useCallback((newState) => {
     setState(newState);
-    save({roster:newState.roster,shifts:newState.shifts,notifications:newState.notifications,availability:newState.availability,expenses:newState.expenses||[],customRoleTags:newState.customRoleTags||[]});
+    save({roster:newState.roster,shifts:newState.shifts,notifications:newState.notifications,availability:newState.availability,expenses:newState.expenses||[],customRoleTags:newState.customRoleTags||[],removedUserIds:newState.removedUserIds||[]});
   },[]);
 
   // Helper: update a single shift and auto-stamp lastUpdated.
@@ -1709,7 +1712,7 @@ export default function App({ sessionUser = null }) {
         return { ...updated, lastUpdated: now(), updatedBy: updatedByName || "" };
       });
       const ns = { ...prevState, shifts: newShifts };
-      save({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[]});
+      save({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedUserIds:ns.removedUserIds||[]});
       return ns;
     });
   },[]);
@@ -4550,7 +4553,13 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
   }
   function deleteMember(id){
     if(!confirm("Permanently delete this crew member from the roster?")) return;
-    persist({...state,roster:state.roster.filter(r=>r.id!==id)});
+    const member = state.roster.find(r=>r.id===id);
+    // If this person has a real account, tombstone their user id so the
+    // server-side merge won't re-add them on the next sync.
+    const removedUserIds = member?.userId
+      ? [...new Set([...(state.removedUserIds||[]), member.userId])]
+      : (state.removedUserIds||[]);
+    persist({...state, roster:state.roster.filter(r=>r.id!==id), removedUserIds});
     setProfileId(null);
   }
 
