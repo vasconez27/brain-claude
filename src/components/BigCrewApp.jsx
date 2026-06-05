@@ -33,6 +33,20 @@ async function save(d) {
   return _saveChain;
 }
 
+// Per-device dismissal of management notifications — kept in localStorage so one
+// person clearing an alert doesn't remove it from the shared data for everyone.
+const DISMISS_KEY = "bigcrew_dismissed_notifs";
+function getDismissedNotifs() {
+  try { return new Set(JSON.parse(localStorage.getItem(DISMISS_KEY) || "[]")); }
+  catch { return new Set(); }
+}
+function dismissNotif(id) {
+  try {
+    const s = getDismissedNotifs(); s.add(id);
+    localStorage.setItem(DISMISS_KEY, JSON.stringify([...s]));
+  } catch {}
+}
+
 // ─── THEME ───────────────────────────────────────────────────────────────────
 // Colors flow through CSS variables (set on <html> by applyTheme) so the whole
 // app can switch between light and dark at runtime.
@@ -1640,7 +1654,7 @@ export default function App({ sessionUser = null }) {
       setState(s => ({...s, ...d}));
     }
     const onVisible = () => { if(document.visibilityState === "visible") refresh(); };
-    const id = setInterval(refresh, 20000);
+    const id = setInterval(refresh, 10000);
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
@@ -2091,7 +2105,9 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
   const myCrewEntry = activeShift?.crew.find(c=>c.rosterId===currentUser.id||c.id===currentUser.id);
 
   // Unread notifications
-  const myNotifs = state.notifications.filter(n=>n.to===currentUser.id||n.to==="all").slice(0,3);
+  const [dismissed, setDismissed] = useState(()=>getDismissedNotifs());
+  function handleDismiss(id){ dismissNotif(id); setDismissed(getDismissedNotifs()); }
+  const myNotifs = state.notifications.filter(n=>(n.to===currentUser.id||n.to==="all") && !dismissed.has(n.id)).slice(0,3);
 
   return (
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
@@ -2124,6 +2140,8 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
                   <div style={{fontSize:"12px",color:C.text,lineHeight:"1.4"}}>{n.text}</div>
                   <div style={{fontSize:"9px",color:C.dim,marginTop:"4px"}}>{fmt(n.ts)}</div>
                 </div>
+                <button onClick={()=>handleDismiss(n.id)} aria-label="Dismiss"
+                  style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:"15px",lineHeight:1,padding:"2px 4px",flexShrink:0}}>✕</button>
               </div>
             ))}
           </div>
@@ -2266,6 +2284,11 @@ function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activ
     const tasks = activeShift.tasks.map(t=>t.id===tid?{...t,done:!t.done}:t);
     persist({...state,shifts:state.shifts.map(s=>s.id===activeShift.id?{...s,tasks}:s)});
   }
+  function removeShift() {
+    if(!window.confirm(`Remove "${activeShift.client}" on ${activeShift.date}? This deletes the shift for everyone.`)) return;
+    persist({...state, shifts: state.shifts.filter(s=>s.id!==activeShift.id)});
+    setScreen("home");
+  }
 
   const clockedIn = me?.clockIn&&!me?.clockOut;
   const clockedOut = !!me?.clockOut;
@@ -2275,6 +2298,13 @@ function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activ
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
       <style>{GS}</style>
       <PageHeader title={activeShift.client} sub={`${activeShift.date} · ${currentUser.name}`} onBack={()=>setScreen("home")}/>
+
+      {/* Manager actions */}
+      {isManager && (
+        <div style={{background:C.s1,borderBottom:`1px solid ${C.border}`,padding:"8px 14px",display:"flex",justifyContent:"flex-end",gap:"8px"}}>
+          <button onClick={removeShift} style={{...btn("ghost"),padding:"7px 12px",fontSize:"10px",border:`1px solid ${C.red}`,color:C.red}}>🗑 REMOVE SHIFT</button>
+        </div>
+      )}
 
       {/* Clock bar */}
       {me && (
@@ -3853,6 +3883,17 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
           </div>
         )}
 
+        {/* Live preview — pinned to the top so it stays in place while you edit */}
+        <div style={{...card({border:`1.5px solid ${C.gold}`}),position:"sticky",top:"56px",zIndex:30,marginBottom:"12px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
+            <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",letterSpacing:"0.12em"}}>📨 LIVE PREVIEW</div>
+            <div style={{fontSize:"9px",color:C.muted}}>{messageText.length} chars</div>
+          </div>
+          <div style={{background:C.s2,borderRadius:"7px",padding:"12px",fontSize:"12px",lineHeight:"1.7",color:C.text,whiteSpace:"pre-wrap",fontFamily:"'Courier New',monospace",maxHeight:"240px",overflowY:"auto",border:`1px solid ${C.border}`}}>
+            {messageText}
+          </div>
+        </div>
+
         <div className="bcn-row-side">
           {/* ── LEFT: STRUCTURED EDITOR ── */}
           <div style={{display:msgMode==="custom"?"none":"flex",flexDirection:"column",gap:"12px"}}>
@@ -3971,18 +4012,8 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
             </button>
           </div>
 
-          {/* ── RIGHT: LIVE PREVIEW + SEND ── */}
+          {/* ── RIGHT: SEND ── */}
           <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-            <div style={{...card({border:`1.5px solid ${C.gold}`,position:"sticky",top:"80px"})}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
-                <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",letterSpacing:"0.12em"}}>📨 LIVE PREVIEW</div>
-                <div style={{fontSize:"9px",color:C.muted}}>{messageText.length} chars</div>
-              </div>
-              <div style={{background:C.s2,borderRadius:"7px",padding:"14px",fontSize:"12px",lineHeight:"1.8",color:C.text,whiteSpace:"pre-wrap",fontFamily:"'Courier New',monospace",maxHeight:"480px",overflowY:"auto",border:`1px solid ${C.border}`}}>
-                {messageText}
-              </div>
-            </div>
-
             {/* Send buttons */}
             <div style={card()}>
               <span style={lbl}>📤 Send to Crew</span>
