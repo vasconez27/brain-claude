@@ -61,6 +61,9 @@ function applyTheme(name) {
   const t = THEMES[name] || THEMES.light;
   const root = document.documentElement;
   Object.entries(t).forEach(([k, v]) => root.style.setProperty("--bc-" + k, v));
+  // Make native controls (date/time pickers) match the active theme instead of
+  // always rendering dark — otherwise they look "blacked out" in light mode.
+  root.style.colorScheme = name === "dark" ? "dark" : "light";
   root.dataset.bcTheme = name;
 }
 
@@ -134,7 +137,7 @@ function shiftProgress(shift, now = new Date()) {
 //   → Completed → Paid → Archived
 const STATUS_ORDER = ["draft","open","assigned","awaiting","confirmed","in_progress","completed","paid","archived"];
 const STATUS_META = {
-  draft:       {label:"Draft",             short:"DRAFT",      color:"#71717a", bg:"#1c1c1f"},
+  draft:       {label:"Draft",             short:"DRAFT",      color:"#71717a", bg:"rgba(113,113,122,0.15)"},
   open:        {label:"Open",              short:"OPEN",       color:"#4D9FFF", bg:"rgba(77,159,255,0.12)"},
   assigned:    {label:"Crew Assigned",     short:"ASSIGNED",   color:"#A78BFA", bg:"rgba(167,139,250,0.12)"},
   awaiting:    {label:"Awaiting Confirm",  short:"AWAITING",   color:"#E8C84A", bg:"rgba(232,200,74,0.12)"},
@@ -142,7 +145,7 @@ const STATUS_META = {
   in_progress: {label:"In Progress",       short:"LIVE",       color:"#E8C84A", bg:"rgba(232,200,74,0.18)"},
   completed:   {label:"Completed",         short:"DONE",       color:"#3ECF8E", bg:"rgba(62,207,142,0.10)"},
   paid:        {label:"Paid",              short:"PAID",       color:"#22c55e", bg:"rgba(34,197,94,0.14)"},
-  archived:    {label:"Archived",          short:"ARCHIVED",   color:"#52525b", bg:"#161618"},
+  archived:    {label:"Archived",          short:"ARCHIVED",   color:"#52525b", bg:"rgba(82,82,91,0.15)"},
 };
 
 // Auto-derive a shift's pipeline status from its data + the clock.
@@ -479,7 +482,7 @@ function fmtHour12(h) {
 function parseCalendarPaste(input) {
   if (!input || !input.trim()) return null;
   const txt = input.trim();
-  const result = { client:"", date:"", callTime:"", endTime:"", location:"", address:"", poc:"", pocPhone:"", notes:"", scope:[] };
+  const result = { client:"", date:"", callTime:"", endTime:"", location:"", address:"", poc:"", pocPhone:"", notes:"", uniform:"", scope:[] };
 
   // Try URL first - Google Calendar event URL
   if (/calendar\.google\.com|calendar\.app\.google/i.test(txt)) {
@@ -510,74 +513,136 @@ function parseCalendarPaste(input) {
     } catch(e) { /* fall through to text parsing */ }
   }
 
-  // Text parsing — look for common patterns
-  // Date patterns: MM/DD/YYYY, MM-DD-YYYY, "Saturday, May 31, 2026", "May 31"
-  const dateMatch = txt.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (dateMatch) {
-    const [, m, d, y] = dateMatch;
-    result.date = `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
-  } else {
-    // Try "Month DD, YYYY"
-    const monthMatch = txt.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})(?:,?\s+(\d{4}))?/i);
-    if (monthMatch) {
-      const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
-      const mIdx = months[monthMatch[1].slice(0,3).toLowerCase()];
-      const d = parseInt(monthMatch[2]);
-      const y = monthMatch[3] ? parseInt(monthMatch[3]) : new Date().getFullYear();
-      if (mIdx !== undefined) {
-        result.date = `${y}-${String(mIdx+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-      }
+  // ── TEXT PARSING ────────────────────────────────────────────────────────
+  // Small extractors that pull structured values out of loose strings.
+  const toDisp = (h, m, ap) => {
+    let hh = parseInt(h, 10);
+    const mm = (m || "00").padStart(2, "0");
+    let suf = (ap || "").toUpperCase();
+    if (!suf) suf = hh >= 12 ? "PM" : "AM";
+    if (hh > 12) { hh -= 12; suf = "PM"; }
+    if (hh === 0) { hh = 12; if (!ap) suf = "AM"; }
+    return `${hh}:${mm} ${suf}`;
+  };
+  const extractTimes = (str) => {
+    const range = str.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|—|to|until|thru|through)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+    if (range) {
+      const [, h1, m1, ap1, h2, m2, ap2] = range;
+      return { call: toDisp(h1, m1, ap1), end: toDisp(h2, m2, ap2) };
     }
+    const single = str.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i) || str.match(/\b(\d{1,2}):(\d{2})\b/);
+    if (single) return { call: toDisp(single[1], single[2], single[3]), end: "" };
+    return null;
+  };
+  const extractDate = (str) => {
+    const slash = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (slash) {
+      let [, mo, d, y] = slash;
+      if (y.length === 2) y = "20" + y;
+      return `${y}-${mo.padStart(2,"0")}-${d.padStart(2,"0")}`;
+    }
+    const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+    const mon = str.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?/i);
+    if (mon) {
+      const mi = months[mon[1].slice(0,3).toLowerCase()];
+      const d = parseInt(mon[2], 10);
+      const y = mon[3] ? parseInt(mon[3], 10) : new Date().getFullYear();
+      if (mi !== undefined) return `${y}-${String(mi+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    }
+    return "";
+  };
+  const extractPhone = (str) => {
+    const m = str.match(/(\+?\d[\d\s().-]{6,}\d)/);
+    return m ? m[1].trim() : "";
+  };
+
+  const lines = txt.split("\n").map(l => l.trim()).filter(Boolean);
+
+  // 1) Labeled fields take priority — "Client:", "Call time:", "Location:", POC,
+  //    Uniform, Notes, Scope. Handles our own blast format and most structured
+  //    pastes. Uniform/Notes/Scope can continue onto following lines.
+  const FIELD = {
+    client:   /^(client|customer|company|account)\b/i,
+    title:    /^(title|event|subject|summary|gig|job)\b/i,
+    date:     /^(date|when|day)\b/i,
+    call:     /^(call\s*time|call|start\s*time|start|time|hours?)\b/i,
+    end:      /^(end\s*time|end|finish|wrap|out)\b/i,
+    location: /^(location|where|venue|site|loc)\b/i,
+    address:  /^(address|addr)\b/i,
+    poc:      /^(point\s*of\s*contact|poc|contact|supervisor|lead|on[\s-]?site)\b/i,
+    phone:    /^(phone|cell|mobile|tel|number|ph)\b/i,
+    uniform:  /^(uniform|dress|attire|wear)\b/i,
+    scope:    /^(scope|tasks?|work|sow)\b/i,
+    notes:    /^(notes?|details|description|info|instructions)\b/i,
+  };
+
+  let capture = null; // active multi-line field: "uniform" | "notes" | "scope"
+  const consumed = new Set();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Standalone bullet → scope item.
+    if (/^[•*\-–·]\s+/.test(line)) {
+      const item = line.replace(/^[•*\-–·]\s+/, "").trim();
+      if (item) result.scope.push(item);
+      consumed.add(i); capture = "scope";
+      continue;
+    }
+
+    const colon = line.indexOf(":");
+    const label = colon > 0 && colon <= 40 ? line.slice(0, colon).toLowerCase().trim() : "";
+    const value = colon > 0 ? line.slice(colon + 1).trim() : "";
+    const isLabel = label && Object.values(FIELD).some(rx => rx.test(label));
+
+    if (isLabel) {
+      consumed.add(i); capture = null;
+      if (FIELD.client.test(label) || FIELD.title.test(label)) { if (!result.client && value) result.client = value; }
+      else if (FIELD.date.test(label)) { const d = extractDate(value); if (d) result.date = d; const t = extractTimes(value); if (t) { if (!result.callTime) result.callTime = t.call; if (t.end && !result.endTime) result.endTime = t.end; } }
+      else if (FIELD.end.test(label)) { const t = extractTimes(value); if (t) result.endTime = t.call; }
+      else if (FIELD.call.test(label)) { const t = extractTimes(value); if (t) { result.callTime = t.call; if (t.end) result.endTime = t.end; } }
+      else if (FIELD.address.test(label)) { if (value) { result.address = value; if (!result.location) result.location = value.split(",")[0].trim(); } }
+      else if (FIELD.location.test(label)) { if (value) { result.location = value.split(",")[0].trim(); if (!result.address && /\d/.test(value)) result.address = value; } }
+      else if (FIELD.poc.test(label)) { const ph = extractPhone(value); if (ph) result.pocPhone = ph; const nm = value.replace(ph, "").replace(/^[\s,\-–—·|]+|[\s,\-–—·|]+$/g, "").trim(); if (nm) result.poc = nm; }
+      else if (FIELD.phone.test(label)) { const ph = extractPhone(value) || value; if (ph) result.pocPhone = ph; }
+      else if (FIELD.uniform.test(label)) { if (value) result.uniform = value; capture = "uniform"; }
+      else if (FIELD.scope.test(label)) { if (value) result.scope.push(value); capture = "scope"; }
+      else if (FIELD.notes.test(label)) { if (value) result.notes = value; capture = "notes"; }
+      continue;
+    }
+
+    // Continuation of a multi-line labeled field. (Scope only grows from bullet
+    // lines, handled above — so trailing prose falls through to notes instead.)
+    if (capture === "uniform") { result.uniform = result.uniform ? result.uniform + " " + line : line; consumed.add(i); continue; }
+    if (capture === "notes")   { result.notes = result.notes ? result.notes + "\n" + line : line; consumed.add(i); continue; }
   }
 
-  // Time range: "3pm - 12am", "3:00 PM to 12:00 AM", "15:00-00:00"
-  const timeRange = txt.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|to|–|—|until|until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
-  if (timeRange) {
-    const [, h1, m1, ap1, h2, m2, ap2] = timeRange;
-    const toDisp = (h, m, ap) => {
-      let hh = parseInt(h);
-      const mm = m || "00";
-      let suf = (ap || "").toUpperCase();
-      if (!suf) suf = hh >= 12 ? "PM" : "AM";
-      if (hh > 12) { hh -= 12; suf = "PM"; }
-      if (hh === 0) { hh = 12; suf = "AM"; }
-      return `${hh}:${mm} ${suf}`;
-    };
-    result.callTime = toDisp(h1, m1, ap1);
-    result.endTime = toDisp(h2, m2, ap2);
+  // 2) Global fallbacks for anything the labels didn't catch.
+  if (!result.date) { const d = extractDate(txt); if (d) result.date = d; }
+  if (!result.callTime) { const t = extractTimes(txt); if (t) { result.callTime = t.call; if (t.end) result.endTime = t.end; } }
+
+  if (!result.location) {
+    const at = lines.find((l, i) => !consumed.has(i) && /^@\s*/.test(l));
+    if (at) { const v = at.replace(/^@\s*/, ""); result.location = v.split(",")[0].trim(); if (v.includes(",")) result.address = v; }
   }
 
-  // Title — usually first non-empty line, before any date/time
-  const lines = txt.split("\n").map(l=>l.trim()).filter(Boolean);
-  if (lines.length > 0 && !result.client) {
-    // First line that's not just a date or time
-    for (const line of lines) {
-      if (!/^\d/.test(line) && line.length < 80) {
-        result.client = line;
-        break;
-      }
-    }
+  // Title: first “wordy” line that isn't a date/time/bullet/number.
+  if (!result.client) {
+    const cand = lines.find((l, i) => !consumed.has(i) && !/^[•*\-–·@\d]/.test(l) && !extractDate(l) && !extractTimes(l) && l.length <= 80);
+    if (cand) result.client = cand;
   }
 
-  // Location: line containing "@" or following "Location:" or "Where:"
-  for (const line of lines) {
-    if (/^(location|where|venue|address):/i.test(line)) {
-      const v = line.replace(/^[^:]+:/, "").trim();
-      result.address = v;
-      result.location = v.split(",")[0];
-      break;
-    }
-    if (line.startsWith("@ ") || line.startsWith("@")) {
-      result.location = line.replace(/^@\s*/, "");
-      break;
-    }
-  }
-
-  // Notes — everything else
-  const skipPatterns = [/^\d/, /^(location|where|venue|address|when|date|time):/i];
-  const noteLines = lines.filter(l => l !== result.client && !skipPatterns.some(p => p.test(l)));
-  if (noteLines.length > 0 && !result.notes) {
-    result.notes = noteLines.join("\n");
+  // Notes: leftover instruction-like lines (not labels/dates/times/crew numbers).
+  if (!result.notes) {
+    const leftovers = lines.filter((l, i) =>
+      !consumed.has(i) &&
+      l !== result.client &&
+      !/^[•*\-–·@]/.test(l) &&
+      !/^\d+[.)]/.test(l) &&
+      !extractDate(l) && !extractTimes(l) &&
+      l.indexOf(":") === -1
+    );
+    if (leftovers.length) result.notes = leftovers.join("\n");
   }
 
   return result;
@@ -1030,18 +1095,20 @@ function SearchableNameDropdown({options, onSelect, placeholder="Type a name…"
 }
 
 // Time input that handles AM/PM display – internally 24-hour, displays 12-hour
-function TimeInput({value, onChange, placeholder="3:00 PM"}) {
-  // value is stored as "3:00 PM" format; <input type="time"> wants "HH:MM" 24-hour
+function TimeInput({value, onChange}) {
+  // value is stored as "3:00 PM" format; <input type="time"> wants "HH:MM" 24-hour.
+  // The right-hand chip mirrors the *actual* selected time (or "Not set") rather
+  // than a misleading fixed default.
   return (
     <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
       <input
         type="time"
         value={to24Hour(value)}
         onChange={e=>onChange(from24Hour(e.target.value))}
-        style={{...inp,flex:1,colorScheme:"dark"}}
+        style={{...inp,flex:1}}
       />
-      <div style={{fontSize:"11px",color:C.muted,minWidth:"60px",textAlign:"right",fontWeight:"600"}}>
-        {value || placeholder}
+      <div style={{fontSize:"11px",color:value?C.text:C.dim,minWidth:"64px",textAlign:"right",fontWeight:"700"}}>
+        {value || "Not set"}
       </div>
     </div>
   );
@@ -1877,7 +1944,7 @@ function ManagerOpsOverview({state, setScreen, setActiveShiftId}) {
 
       {/* Alerts */}
       {(openPositions>0 || declinedCount>0) && (
-        <div style={{...card({background:"#1a1400",border:`1px solid ${C.goldDim}`,marginBottom:"10px"})}}>
+        <div style={{...card({background:C.goldBg,border:`1px solid ${C.goldDim}`,marginBottom:"10px"})}}>
           <div style={{fontSize:"10px",color:C.gold,fontWeight:"700",letterSpacing:"0.08em",marginBottom:"4px"}}>⚠️ NEEDS ATTENTION</div>
           <div style={{fontSize:"11px",color:C.text,lineHeight:"1.5"}}>
             {openPositions>0 && <div>· {openPositions} open position{openPositions>1?"s":""} still unfilled</div>}
@@ -2269,7 +2336,7 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state}) {
         </div>
       )}
       {/* Notes */}
-      <div style={{background:"#1a1400",border:`1px solid ${C.goldDim}`,borderRadius:"10px",padding:"12px",display:"flex",gap:"10px"}}>
+      <div style={{background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"10px",padding:"12px",display:"flex",gap:"10px"}}>
         <span style={{fontSize:"18px"}}>⚠️</span>
         <div style={{fontSize:"12px",color:"#d4cfbf",lineHeight:"1.6"}}>{shift.notes}</div>
       </div>
@@ -2309,7 +2376,7 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state}) {
         ))}
       </div>
       {/* Uniform */}
-      <div style={{...card({background:"#0e0e14",border:`1px solid #2a2a3a`})}} >
+      <div style={{...card({background:C.s2,border:`1px solid ${C.borderHi}`})}} >
         <span style={lbl}>👕 Uniform</span>
         <div style={{fontSize:"12px",color:"#c8c4d4",lineHeight:"1.6"}}>{shift.uniform}</div>
       </div>
@@ -3130,7 +3197,7 @@ function AvailabilityScreen({state,persist,setScreen,currentUser,embedded}) {
                   <div style={{display:"flex",flexDirection:"column",gap:"8px",marginTop:"8px"}}>
                     <div>
                       <div style={{fontSize:"9px",color:C.dim,marginBottom:"3px"}}>DATE</div>
-                      <input type="date" value={rangeDate} onChange={e=>setRangeDate(e.target.value)} style={{...inp,colorScheme:"dark"}}/>
+                      <input type="date" value={rangeDate} onChange={e=>setRangeDate(e.target.value)} style={{...inp}}/>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
                       <div>
@@ -3871,7 +3938,7 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
                 <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",letterSpacing:"0.12em"}}>📨 LIVE PREVIEW</div>
                 <div style={{fontSize:"9px",color:C.muted}}>{messageText.length} chars</div>
               </div>
-              <div style={{background:"#0a0a00",borderRadius:"7px",padding:"14px",fontSize:"12px",lineHeight:"1.8",color:C.text,whiteSpace:"pre-wrap",fontFamily:"'Courier New',monospace",maxHeight:"480px",overflowY:"auto",border:`1px solid ${C.border}`}}>
+              <div style={{background:C.s2,borderRadius:"7px",padding:"14px",fontSize:"12px",lineHeight:"1.8",color:C.text,whiteSpace:"pre-wrap",fontFamily:"'Courier New',monospace",maxHeight:"480px",overflowY:"auto",border:`1px solid ${C.border}`}}>
                 {messageText}
               </div>
             </div>
@@ -4645,8 +4712,17 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
       endTime: calParsed.endTime || f.endTime,
       location: calParsed.location || f.location,
       address: calParsed.address || f.address,
+      poc: calParsed.poc || f.poc,
+      pocPhone: calParsed.pocPhone || f.pocPhone,
+      uniform: calParsed.uniform || f.uniform,
       notes: calParsed.notes || f.notes,
     }));
+    if (calParsed.scope && calParsed.scope.length) {
+      setScopeLines(prev => {
+        const existing = prev.filter(l => l.trim());
+        return [...existing, ...calParsed.scope];
+      });
+    }
     setCalPaste("");
     setCalParsed(null);
     setShowCalPaste(false);
@@ -4717,7 +4793,7 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
 
       <div className="bcn-body" style={{display:"flex",flexDirection:"column",gap:"12px"}}>
         {/* GOOGLE CALENDAR PASTE IMPORTER */}
-        <div style={{...card({border:`1.5px dashed ${C.blue}`,background:"#0a1419"})}}>
+        <div style={{...card({border:`1.5px dashed ${C.blue}`,background:C.blueBg})}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}
             onClick={()=>setShowCalPaste(v=>!v)}>
             <div>
@@ -4746,6 +4822,10 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
                     {calParsed.endTime && <div><b style={{color:C.muted}}>End:</b> <span style={{color:C.text}}>{calParsed.endTime}</span></div>}
                     {calParsed.location && <div><b style={{color:C.muted}}>Location:</b> <span style={{color:C.text}}>{calParsed.location}</span></div>}
                     {calParsed.address && <div><b style={{color:C.muted}}>Address:</b> <span style={{color:C.text}}>{calParsed.address}</span></div>}
+                    {calParsed.poc && <div><b style={{color:C.muted}}>Contact:</b> <span style={{color:C.text}}>{calParsed.poc}{calParsed.pocPhone?` · ${calParsed.pocPhone}`:""}</span></div>}
+                    {!calParsed.poc && calParsed.pocPhone && <div><b style={{color:C.muted}}>Phone:</b> <span style={{color:C.text}}>{calParsed.pocPhone}</span></div>}
+                    {calParsed.uniform && <div><b style={{color:C.muted}}>Uniform:</b> <span style={{color:C.text}}>{calParsed.uniform}</span></div>}
+                    {calParsed.scope && calParsed.scope.length>0 && <div><b style={{color:C.muted}}>Scope:</b> <span style={{color:C.text}}>{calParsed.scope.join(" · ")}</span></div>}
                     {calParsed.notes && <div><b style={{color:C.muted}}>Notes:</b> <span style={{color:C.text}}>{calParsed.notes}</span></div>}
                   </div>
                   <button onClick={applyCalendarParse} style={{...btn("green",true),marginTop:"10px"}}>✓ APPLY TO FORM</button>
@@ -4767,16 +4847,16 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
             </div>
             <div>
               <span style={lbl}>Date *</span>
-              <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px",colorScheme:"dark"}}/>
+              <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px"}}/>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
               <div>
                 <span style={lbl}>Call Time *</span>
-                <TimeInput value={form.callTime} onChange={v=>setForm(f=>({...f,callTime:v}))} placeholder="3:00 PM"/>
+                <TimeInput value={form.callTime} onChange={v=>setForm(f=>({...f,callTime:v}))}/>
               </div>
               <div>
                 <span style={lbl}>End Time</span>
-                <TimeInput value={form.endTime} onChange={v=>setForm(f=>({...f,endTime:v}))} placeholder="12:00 AM"/>
+                <TimeInput value={form.endTime} onChange={v=>setForm(f=>({...f,endTime:v}))}/>
               </div>
             </div>
             <div>
@@ -5473,7 +5553,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
         {/* ── LOG TAB ── */}
         {tab==="log" && (
           <div style={{animation:"fadeUp 0.3s ease",display:"flex",flexDirection:"column",gap:"12px"}}>
-            <div style={{background:"#120c00",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px"}}>
+            <div style={{background:"rgba(249,115,22,0.10)",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px"}}>
               <div style={{fontSize:"11px",color:"#F97316",fontWeight:"700",letterSpacing:"0.1em",marginBottom:"4px"}}>💡 HOW IT WORKS</div>
               <div style={{fontSize:"11px",color:C.muted,lineHeight:"1.6"}}>Log your expenses for each shift day. Add individual receipt amounts — they'll be shown as an addition (e.g. $22.28+$11.86=$34.14). Enter your <b style={{color:C.text}}>paid</b> amount manually. Everything auto-formats for tax season.</div>
             </div>
@@ -5485,7 +5565,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
                   <div>
                     <span style={lbl}>Date *</span>
-                    <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px",colorScheme:"dark"}}/>
+                    <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px"}}/>
                   </div>
                   <div>
                     <span style={lbl}>Category</span>
@@ -5580,7 +5660,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
             ) : (
               <>
                 {/* Ledger display – exact requested format */}
-                <div style={{...card({background:"#0a0a00",border:`1px solid #2a2000`,marginBottom:"12px",padding:"16px"})}}>
+                <div style={{...card({background:C.s2,border:`1px solid ${C.border}`,marginBottom:"12px",padding:"16px"})}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
                     <div style={{fontFamily:C.head,fontSize:"16px",letterSpacing:"0.08em",color:"#F97316"}}>{MONTHS[viewMonth].toUpperCase()}</div>
                     <button onClick={()=>copy(buildMonthCopyText())} style={{...btn("ghost"),padding:"5px 10px",fontSize:"10px",border:`1px solid ${C.border}`,color:copied?C.green:C.muted}}>
@@ -5677,7 +5757,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
             </div>
 
             {/* 1099 disclaimer */}
-            <div style={{background:"#120c00",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px",marginBottom:"14px"}}>
+            <div style={{background:"rgba(249,115,22,0.10)",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px",marginBottom:"14px"}}>
               <div style={{fontSize:"10px",color:"#F97316",fontWeight:"700",letterSpacing:"0.12em",marginBottom:"4px"}}>1099-NEC · NEW YORK, NY · SINGLE FILER</div>
               <div style={{fontSize:"11px",color:C.muted,lineHeight:"1.6"}}>
                 Estimate covers Federal + NY State + NYC + Self-Employment tax based on <b style={{color:C.text}}>2024 brackets</b>. Brackets change yearly — verify with a CPA before filing. Married/HoH or non-resident filers will see different numbers.
@@ -5746,7 +5826,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                   </div>
 
                   {/* Bottom line */}
-                  <div style={{background:"#120c00",borderRadius:"8px",padding:"12px",marginTop:"10px"}}>
+                  <div style={{background:"rgba(249,115,22,0.10)",borderRadius:"8px",padding:"12px",marginTop:"10px"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}}>
                       <span style={{fontSize:"12px",color:C.text,fontWeight:"700"}}>TOTAL ESTIMATED TAX</span>
                       <span style={{fontSize:"18px",color:"#F97316",fontWeight:"700"}}>{fmtMoney(tax.totalTax)}</span>
@@ -5928,7 +6008,7 @@ function TaxSavingsCalc({gross, taxable}) {
         </div>
       </div>
 
-      <div style={{background:"#1a1400",border:`1px solid ${C.goldDim}`,borderRadius:"6px",padding:"10px"}}>
+      <div style={{background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"6px",padding:"10px"}}>
         <div style={{fontSize:"10px",color:C.gold,fontWeight:"700",marginBottom:"4px",letterSpacing:"0.08em"}}>⚠️ NOT TAX ADVICE</div>
         <div style={{fontSize:"10px",color:C.muted,lineHeight:"1.5"}}>
           A rough guide only. Your actual rate depends on federal bracket, NY state tax, deductions, and other income. <b style={{color:C.text}}>Verify with a CPA.</b> Self-employment tax rate (~15.3% combined Social Security + Medicare) is what I believe is current — please confirm at irs.gov.
@@ -5972,7 +6052,7 @@ function GoogleCalSetupGuide({onClose}) {
           </div>
         </div>
 
-        <div style={{background:"#1a1400",border:`1px solid ${C.goldDim}`,borderRadius:"8px",padding:"12px"}}>
+        <div style={{background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"8px",padding:"12px"}}>
           <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",marginBottom:"4px",letterSpacing:"0.08em"}}>💡 RECOMMENDATION</div>
           <div style={{fontSize:"11px",color:C.text,lineHeight:"1.6"}}>For your pitch, the "Add to Calendar" button is more than enough — it's instant and looks polished. Add full OAuth sync once BigCrew commits to deploying. That keeps complexity out of the demo phase.</div>
         </div>
