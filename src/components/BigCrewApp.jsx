@@ -15,17 +15,21 @@ async function load() {
   } catch { return null; }
 }
 // Writes are serialized through a promise chain so rapid saves land in order
-// (last write wins) instead of racing each other to the server.
+// (last write wins) instead of racing each other to the server. `pendingSaves`
+// lets the live-refresh skip pulling stale server data mid-write.
 let _saveChain = Promise.resolve();
+let pendingSaves = 0;
 async function save(d) {
   const body = JSON.stringify(d);
+  pendingSaves++;
   _saveChain = _saveChain
     .then(() => fetch("/api/workspace", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body,
     }))
-    .catch(e => console.error(e));
+    .catch(e => console.error(e))
+    .finally(() => { pendingSaves = Math.max(0, pendingSaves - 1); });
   return _saveChain;
 }
 
@@ -1604,6 +1608,7 @@ export default function App({ sessionUser = null }) {
   // Single source of truth for dark/light across the WHOLE site (next-themes).
   const { theme, setTheme } = useTheme();
   const autoLoggedIn = useRef(false);
+  const lastSyncRef = useRef(null); // signature of last-applied server state
 
   // Apply the demo's CSS variables whenever the shared theme changes.
   useEffect(()=>{
@@ -1612,10 +1617,39 @@ export default function App({ sessionUser = null }) {
 
   useEffect(()=>{
     load().then(saved=>{
-      if(saved) setState(s=>({...INIT,...saved}));
+      if(saved){ setState(s=>({...INIT,...saved})); lastSyncRef.current = JSON.stringify(saved); }
       setLoaded(true);
     });
   },[]);
+
+  // Live sync — this is a real shared app, not a demo. Pull the latest shared
+  // workspace so changes a manager makes (removing staff, editing a shift, etc.)
+  // show up for crew without a manual reload. Runs on tab focus and on a short
+  // interval, and skips while a local save is in flight so it never clobbers an
+  // optimistic change with stale server data.
+  useEffect(()=>{
+    if(!loaded) return;
+    let cancelled = false;
+    async function refresh(){
+      if(pendingSaves > 0) return;
+      const d = await load();
+      if(cancelled || !d || pendingSaves > 0) return;
+      const sig = JSON.stringify(d);
+      if(sig === lastSyncRef.current) return; // nothing changed — don't re-render
+      lastSyncRef.current = sig;
+      setState(s => ({...s, ...d}));
+    }
+    const onVisible = () => { if(document.visibilityState === "visible") refresh(); };
+    const id = setInterval(refresh, 20000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  },[loaded]);
 
   // Auto-login from the real NextAuth session — skips the demo's own login
   // screen entirely. Role decides which portal opens (manager vs crew).
@@ -3376,7 +3410,7 @@ function AvailabilityScreen({state,persist,setScreen,currentUser,embedded}) {
 // ══════════════════════════════════════════════════════════════════════════════
 // WEEKLY SCHEDULE GRID – visual 7-day × hourly view (managers)
 // ══════════════════════════════════════════════════════════════════════════════
-function WeekGridScreen({state, setScreen, setActiveShiftId, embedded}) {
+function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUser}) {
   const [weekStart, setWeekStart] = useState(getWeekStart(new Date()));
 
   // 7 days starting Monday
@@ -3470,13 +3504,17 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded}) {
             style={{...btn("ghost"),padding:"7px 12px",fontSize:"11px",border:`1px solid ${C.border}`}}>Next Week ›</button>
         </div>
 
-        {/* Stats */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"14px"}}>
-          {[
+        {/* Stats — "Crew Bookings" is a manager-only metric */}
+        {(() => {
+          const isManager = currentUser?.role === "manager";
+          const stats = [
             {label:"Shifts",value:totalShiftsThisWeek,color:C.gold,icon:"📅"},
-            {label:"Crew Bookings",value:totalCrewBookings,color:C.green,icon:"👥"},
+            ...(isManager ? [{label:"Crew Bookings",value:totalCrewBookings,color:C.green,icon:"👥"}] : []),
             {label:"Days w/ Work",value:days.filter(d=>shiftsOn(d).length>0).length,color:C.blue,icon:"⚡"},
-          ].map(s=>(
+          ];
+          return (
+        <div style={{display:"grid",gridTemplateColumns:`repeat(${stats.length},1fr)`,gap:"8px",marginBottom:"14px"}}>
+          {stats.map(s=>(
             <div key={s.label} style={{...card({textAlign:"center",padding:"10px 6px"})}}>
               <div style={{fontSize:"18px",marginBottom:"2px"}}>{s.icon}</div>
               <div style={{fontSize:"18px",fontWeight:"700",color:s.color}}>{s.value}</div>
@@ -3484,6 +3522,8 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded}) {
             </div>
           ))}
         </div>
+          );
+        })()}
 
         {/* Grid */}
         <div style={{...card({padding:"0",overflow:"hidden"})}}>
@@ -5055,7 +5095,7 @@ function ScheduleScreen({state, persist, setScreen, currentUser, activeShift, se
         </div>
       </div>
       {view==="calendar" && <CalendarScreen embedded state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>}
-      {view==="week" && <WeekGridScreen embedded state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>}
+      {view==="week" && <WeekGridScreen embedded state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>}
       {view==="avail" && <AvailabilityScreen embedded state={state} persist={persist} setScreen={setScreen} currentUser={currentUser}/>}
     </div>
   );
