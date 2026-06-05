@@ -3531,6 +3531,29 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded}) {
 // ══════════════════════════════════════════════════════════════════════════════
 // MESSAGE SCREEN – Structured editor matching exact BigCrew format
 // ══════════════════════════════════════════════════════════════════════════════
+// Shown by manager screens that operate on a specific shift, when none exists yet.
+function NoShiftEmptyState({title, setScreen}) {
+  return (
+    <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
+      <style>{GS}</style>
+      <PageHeader title={title} sub="No shift selected" onBack={()=>setScreen("home")}/>
+      <div className="bcn-body">
+        <div style={{...card({textAlign:"center",padding:"34px 20px"})}}>
+          <div style={{fontSize:"34px",marginBottom:"10px"}}>📋</div>
+          <div style={{fontSize:"15px",fontWeight:"700",color:C.text,marginBottom:"6px"}}>No shift to work with yet</div>
+          <div style={{fontSize:"12px",color:C.muted,lineHeight:"1.6",marginBottom:"20px"}}>
+            Create a shift first — then come back here. You can add crew to your roster while building the shift.
+          </div>
+          <div style={{display:"flex",gap:"8px",justifyContent:"center",flexWrap:"wrap"}}>
+            <button onClick={()=>setScreen("newshift")} style={{...btn("gold"),padding:"11px 20px"}}>+ CREATE A SHIFT</button>
+            <button onClick={()=>setScreen("home")} style={{...btn("ghost"),padding:"11px 20px",border:`1px solid ${C.border}`}}>← HOME</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MessageScreen({state,persist,setScreen,activeShift}) {
   // Local form state initialized from active shift
   const [form, setForm] = useState({
@@ -3561,8 +3584,9 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
   const [savePrompt, setSavePrompt] = useState(null); // person pending "save to roster?" decision
   const [msgMode, setMsgMode] = useState("blast"); // blast | custom
   const [customMsg, setCustomMsg] = useState("");
+  const [posted, setPosted] = useState(false);
 
-  if(!activeShift) return null;
+  if(!activeShift) return <NoShiftEmptyState title="Blast Message" setScreen={setScreen}/>;
 
   // Update a scope line
   function updateScope(i, val) {
@@ -3643,15 +3667,22 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
       scope: form.scope.filter(s=>s.trim()),
       generatedMsg: messageText,
     };
-    persist({...state, shifts: state.shifts.map(s=>s.id===activeShift.id?updated:s)});
-    // Also broadcast as announcement
-    const ann = {id:uid(),text:messageText,ts:now(),from:"Management"};
-    const notif = {id:uid(),to:"all",text:`Shift update: ${form.client} on ${form.date}`,ts:now(),shiftId:activeShift.id};
+    // Post the full briefing onto the shift (crew see it under the shift's Updates)
+    // AND drop a dashboard notification so every crew member is alerted in-app.
+    const ann = {id:uid(), text:messageText, ts:now(), from:"Management"};
+    const notif = {
+      id:uid(), to:"all", shiftId:activeShift.id, ts:now(),
+      text:`📋 ${form.client} · ${form.date} — shift details posted. Open your shift to view & confirm.`,
+    };
     persist({
       ...state,
-      shifts: state.shifts.map(s=>s.id===activeShift.id?{...updated,announcements:[ann,...updated.announcements]}:s),
-      notifications: [notif,...state.notifications],
+      shifts: state.shifts.map(s => s.id===activeShift.id
+        ? {...updated, announcements:[ann, ...(updated.announcements||[])]}
+        : s),
+      notifications: [notif, ...state.notifications],
     });
+    setPosted(true);
+    setTimeout(()=>setPosted(false), 2500);
   }
 
   // Build recipient lists
@@ -3810,7 +3841,9 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
                 placeholder="e.g. Parking info, food provided, etc." style={{...inp,marginTop:"6px",minHeight:"60px",resize:"vertical"}}/>
             </div>
 
-            <button onClick={saveToShift} style={{...btn("green",true),padding:"12px"}}>💾 SAVE TO SHIFT & POST</button>
+            <button onClick={saveToShift} style={{...btn("green",true),padding:"12px"}}>
+              {posted ? "✓ POSTED — CREW NOTIFIED" : "💾 SAVE TO SHIFT & NOTIFY CREW"}
+            </button>
           </div>
 
           {/* ── RIGHT: LIVE PREVIEW + SEND ── */}
@@ -3917,7 +3950,7 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
   const [tab,setTab]=useState("overview");
   const [showGcalGuide, setShowGcalGuide] = useState(false);
 
-  if(!activeShift) return null;
+  if(!activeShift) return <NoShiftEmptyState title="Admin Panel" setScreen={setScreen}/>;
 
   function forceConfirm(cid) {
     const crew=activeShift.crew.map(c=>c.id===cid?{...c,confirmed:true,confirmedAt:now()}:c);
