@@ -4,5 +4,5 @@ import BigCrewApp from "@/components/BigCrewApp";
 
 export default async function ManagerDashboard() {
   const session = await getServerSession(authOptions);
-  return <BigCrewApp sessionUser={{ name: session?.user?.name ?? "Manager", role: "manager" }} />;
+  return <BigCrewApp sessionUser={{ id: session?.user?.id, email: session?.user?.email ?? "", name: session?.user?.name ?? "Manager", role: "manager" }} />;
 }

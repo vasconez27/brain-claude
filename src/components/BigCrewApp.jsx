@@ -1557,10 +1557,16 @@ export default function App({ sessionUser = null }) {
     if(sessionUser.role === "manager"){
       setCurrentUser({ id:"manager", name:sessionUser.name || "Manager", role:"manager" });
     } else {
-      // Try to match a roster member by name; otherwise use a synthetic crew id.
-      const match = state.roster?.find(m => (m.name||"").toLowerCase() === (sessionUser.name||"").toLowerCase());
+      // Link to the synced roster entry by account id/email (exact), falling
+      // back to name. Synced entries use the account id as their roster id.
+      const emailLc = (sessionUser.email||"").toLowerCase();
+      const match = state.roster?.find(m =>
+        (sessionUser.id && (m.userId===sessionUser.id || m.id===sessionUser.id)) ||
+        (emailLc && m.email && m.email.toLowerCase()===emailLc) ||
+        (m.name||"").toLowerCase() === (sessionUser.name||"").toLowerCase()
+      );
       if(match) setCurrentUser({ id:match.id, name:match.name, role:"crew", rosterId:match.id });
-      else setCurrentUser({ id:"me", name:sessionUser.name || "Crew", role:"crew", rosterId:"me" });
+      else setCurrentUser({ id:sessionUser.id||"me", name:sessionUser.name || "Crew", role:"crew", rosterId:sessionUser.id||"me" });
     }
     autoLoggedIn.current = true;
     setScreen("home");
@@ -3554,6 +3560,18 @@ function NoShiftEmptyState({title, setScreen}) {
   );
 }
 
+// Compact inline notice for admin tabs that need a shift selected.
+function ShiftNeededNotice({setScreen}) {
+  return (
+    <div style={{textAlign:"center",color:C.muted,fontSize:"12px",padding:"30px 20px",border:`1px dashed ${C.border}`,borderRadius:"10px",lineHeight:"1.6",animation:"fadeUp 0.3s ease"}}>
+      This view needs a shift selected.<br/>Pick one from the schedule, or create a new shift.
+      <div style={{marginTop:"12px"}}>
+        <button onClick={()=>setScreen("newshift")} style={{...btn("gold"),padding:"9px 16px"}}>+ CREATE A SHIFT</button>
+      </div>
+    </div>
+  );
+}
+
 function MessageScreen({state,persist,setScreen,activeShift}) {
   // Local form state initialized from active shift
   const [form, setForm] = useState({
@@ -3947,31 +3965,30 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
 // ADMIN SCREEN
 // ══════════════════════════════════════════════════════════════════════════════
 function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShift,setActiveShiftId}) {
-  const [tab,setTab]=useState("overview");
+  // Admin is the crew + roster hub — the Roster tab works with or without a
+  // shift, so default there when nothing is selected.
+  const [tab,setTab]=useState(activeShift ? "overview" : "roster");
   const [showGcalGuide, setShowGcalGuide] = useState(false);
 
-  if(!activeShift) return <NoShiftEmptyState title="Admin Panel" setScreen={setScreen}/>;
-
   function forceConfirm(cid) {
+    if(!activeShift) return;
     const crew=activeShift.crew.map(c=>c.id===cid?{...c,confirmed:true,confirmedAt:now()}:c);
     persist({...state,shifts:state.shifts.map(s=>s.id===activeShift.id?{...s,crew}:s)});
   }
   function toggleAbsent(cid) {
+    if(!activeShift) return;
     const crew=activeShift.crew.map(c=>c.id===cid?{...c,absent:!c.absent}:c);
     persist({...state,shifts:state.shifts.map(s=>s.id===activeShift.id?{...s,crew}:s)});
   }
-  function updateCrewEmail(cid,email) {
-    const crew=activeShift.crew.map(c=>c.id===cid?{...c,email}:c);
-    persist({...state,shifts:state.shifts.map(s=>s.id===activeShift.id?{...s,crew}:s)});
-  }
   function completeShift() {
+    if(!activeShift) return;
     persist({...state,shifts:state.shifts.map(s=>s.id===activeShift.id?{...s,status:"completed"}:s)});
   }
 
-  const conf=activeShift.crew.filter(c=>c.confirmed).length;
-  const ci=activeShift.crew.filter(c=>c.clockIn&&!c.clockOut).length;
-  const ab=activeShift.crew.filter(c=>c.absent).length;
-  const totalH=activeShift.crew.reduce((a,c)=>a+calcHours(c.clockIn,c.clockOut).total,0);
+  const conf=activeShift?activeShift.crew.filter(c=>c.confirmed).length:0;
+  const ci=activeShift?activeShift.crew.filter(c=>c.clockIn&&!c.clockOut).length:0;
+  const ab=activeShift?activeShift.crew.filter(c=>c.absent).length:0;
+  const totalH=activeShift?activeShift.crew.reduce((a,c)=>a+calcHours(c.clockIn,c.clockOut).total,0):0;
 
   return (
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
@@ -3982,7 +3999,7 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
             <Logo size={32}/>
             <div>
               <div style={{fontFamily:C.head,fontSize:"18px",letterSpacing:"0.08em",color:C.gold,lineHeight:1}}>ADMIN PANEL</div>
-              <div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.14em"}}>{activeShift.client} · {activeShift.date}</div>
+              <div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.14em"}}>{activeShift ? `${activeShift.client} · ${activeShift.date}` : "CREW & ROSTER"}</div>
             </div>
           </div>
           <button onClick={()=>setScreen("home")} style={{...btn("ghost"),padding:"6px 10px",fontSize:"10px",border:`1px solid ${C.border}`}}>← HOME</button>
@@ -3990,15 +4007,16 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
       </div>
 
       <div style={{display:"flex",gap:"3px",padding:"8px 12px",background:C.s1,borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
-        {["overview","crew","shifts","roster"].map(t=>(
+        {["roster","overview","crew"].map(t=>(
           <button key={t} onClick={()=>setTab(t)} style={{...tabBtn(tab===t),flex:"none",padding:"7px 10px",fontSize:"9px",whiteSpace:"nowrap"}}>
-            {t==="overview"?"📊 Overview":t==="crew"?"👥 Crew":t==="shifts"?"📅 Shifts":"📋 Roster"}
+            {t==="roster"?"📋 Roster":t==="overview"?"📊 Crew Status":"👥 Shift Crew"}
           </button>
         ))}
       </div>
 
       <div className="bcn-body" style={{paddingBottom:"80px"}}>
-        {tab==="overview"&&(
+        {tab==="overview"&&!activeShift&&<ShiftNeededNotice setScreen={setScreen}/>}
+        {tab==="overview"&&activeShift&&(
           <div style={{animation:"fadeUp 0.3s ease"}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"14px"}}>
               {[
@@ -4061,8 +4079,7 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
           </div>
         )}
 
-        {tab==="crew"&&<AdminCrewEditTab state={state} persist={persist} activeShift={activeShift}/>}
-        {tab==="shifts"&&<AdminShiftsTab state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} setActiveShiftId={setActiveShiftId} activeShift={activeShift} currentUser={currentUser}/>}
+        {tab==="crew"&&(activeShift ? <AdminCrewEditTab state={state} persist={persist} activeShift={activeShift}/> : <ShiftNeededNotice setScreen={setScreen}/>)}
         {tab==="roster"&&<AdminRosterTab state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>}
       </div>
 
