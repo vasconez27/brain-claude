@@ -2154,7 +2154,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
 
         {/* Next Shift Hero — only when the user is personally on this shift */}
         {activeShift && myCrewEntry && (
-          <div style={{background:`linear-gradient(135deg,${C.goldBg},#0a0a00)`,border:`1.5px solid ${C.gold}`,borderRadius:"12px",padding:"16px",marginBottom:"12px",cursor:"pointer"}}
+          <div style={{background:C.goldBg,border:`1.5px solid ${C.gold}`,borderRadius:"12px",padding:"16px",marginBottom:"12px",cursor:"pointer"}}
             onClick={()=>setScreen("shift")}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
               <div>
@@ -5469,11 +5469,11 @@ function CategoryDropdown({value, onChange}) {
         padding:"10px 12px",cursor:"pointer",fontFamily:C.font,
       }}>
         <span style={{width:"13px",height:"13px",borderRadius:"3px",background:color,flexShrink:0}}/>
-        <span style={{flex:1,textAlign:"left",fontSize:"13px",fontWeight:"700",color:C.text}}>{value}</span>
-        <span style={{color:C.muted,fontSize:"11px",transform:open?"rotate(180deg)":"none",transition:"transform 0.15s"}}>▼</span>
+        <span style={{flex:1,minWidth:0,textAlign:"left",fontSize:"13px",fontWeight:"700",color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{value}</span>
+        <span style={{color:C.muted,fontSize:"11px",flexShrink:0,transform:open?"rotate(180deg)":"none",transition:"transform 0.15s"}}>▼</span>
       </button>
       {open && (
-        <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:"4px",background:C.s2,border:`1px solid ${C.borderHi}`,borderRadius:"8px",zIndex:200,overflow:"hidden",boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}>
+        <div style={{position:"absolute",top:"100%",right:0,marginTop:"4px",minWidth:"180px",background:C.s2,border:`1px solid ${C.borderHi}`,borderRadius:"8px",zIndex:200,overflow:"hidden",boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}>
           {CATS.map(c=>{
             const cc=catColor(c);
             return (
@@ -5775,7 +5775,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
 
                 {/* Expense items */}
                 <div>
-                  <span style={lbl}>Expense Amounts * (one per receipt)</span>
+                  <span style={lbl}>Expense Amount * — tax category on the right →</span>
                   <div style={{display:"flex",flexDirection:"column",gap:"6px",marginTop:"6px"}}>
                     {form.items.map((item,i)=>(
                       <div key={i} style={{display:"flex",gap:"6px",alignItems:"center"}}>
@@ -5783,8 +5783,12 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                         <input type="number" step="0.01" min="0" value={item}
                           onChange={e=>setItem(i,e.target.value)} placeholder="0.00"
                           style={{...inp,flex:1,textAlign:"right"}}/>
-                        {form.items.length>1&&(
-                          <button onClick={()=>removeItem(i)} style={{background:"none",border:`1px solid ${C.redBg}`,borderRadius:"6px",color:C.red,cursor:"pointer",fontSize:"13px",padding:"6px 10px",fontFamily:C.font}}>✕</button>
+                        {i===0 ? (
+                          <div style={{flexShrink:0,width:"148px"}}>
+                            <CategoryDropdown value={form.category} onChange={c=>setForm(f=>({...f,category:c}))}/>
+                          </div>
+                        ) : (
+                          <button onClick={()=>removeItem(i)} style={{background:"none",border:`1px solid ${C.redBg}`,borderRadius:"6px",color:C.red,cursor:"pointer",fontSize:"13px",padding:"6px 10px",fontFamily:C.font,flexShrink:0}}>✕</button>
                         )}
                       </div>
                     ))}
@@ -5795,14 +5799,6 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                       </div>
                     )}
                     <button onClick={addItem} style={{...btn("ghost",true),border:`1px dashed ${C.border}`,padding:"8px",fontSize:"11px"}}>+ Add Receipt</button>
-                  </div>
-                </div>
-
-                {/* Category — colored picker right after the amounts */}
-                <div>
-                  <span style={lbl}>Category</span>
-                  <div style={{marginTop:"4px"}}>
-                    <CategoryDropdown value={form.category} onChange={c=>setForm(f=>({...f,category:c}))}/>
                   </div>
                 </div>
 
