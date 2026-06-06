@@ -2254,10 +2254,85 @@ function NavCard({label,icon,color,onClick}) {
 // ══════════════════════════════════════════════════════════════════════════════
 // SHIFT SCREEN – crew view of the brief
 // ══════════════════════════════════════════════════════════════════════════════
+function CCHoursTab({shift, updateShift, currentUser}) {
+  const start = parseShiftStart(shift.date, shift.callTime);
+  const end = start ? getShiftEnd(start, shift.endTime) : null;
+  const scheduledHours = (start && end) ? Math.round(((end - start) / 3600000) * 100) / 100 : 0;
+
+  const [hoursMap, setHoursMap] = useState(() => {
+    const m = {};
+    shift.crew.filter(c => !c.declined).forEach(c => {
+      m[c.id] = Math.round((c.manualHours ?? scheduledHours) * 100) / 100;
+    });
+    return m;
+  });
+
+  const alreadyDone = !!shift.ccHoursSubmitted;
+
+  function submitHours() {
+    updateShift(shift.id, s => ({
+      ...s,
+      ccHoursSubmitted: true,
+      ccSubmittedBy: currentUser.name,
+      ccSubmittedAt: now(),
+      crew: s.crew.map(c => c.declined ? c : {...c, manualHours: hoursMap[c.id] ?? scheduledHours}),
+    }), currentUser.name);
+  }
+
+  if (alreadyDone) {
+    return (
+      <div style={{textAlign:"center",padding:"36px 20px"}}>
+        <div style={{fontSize:"36px",marginBottom:"8px"}}>✅</div>
+        <div style={{fontSize:"14px",fontWeight:"700",color:C.green,marginBottom:"4px"}}>Hours Submitted</div>
+        <div style={{fontSize:"11px",color:C.muted}}>
+          By {shift.ccSubmittedBy} · {shift.ccSubmittedAt ? fmt(shift.ccSubmittedAt) : ""}
+        </div>
+        <div style={{fontSize:"10px",color:C.dim,marginTop:"8px"}}>Manager can still adjust individual hours if needed.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+      <div style={card()}>
+        <span style={lbl}>Scheduled window</span>
+        <div style={{fontSize:"12px",color:C.text,fontWeight:"700",marginBottom:"14px"}}>
+          {shift.callTime} – {shift.endTime} &nbsp;·&nbsp; {scheduledHours}h scheduled
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+          {shift.crew.filter(c => !c.declined).map(c => (
+            <div key={c.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+              padding:"10px 12px",background:C.s2,border:`1px solid ${C.border}`,borderRadius:"8px"}}>
+              <div>
+                <div style={{fontSize:"13px",fontWeight:"700",color:C.text}}>{c.name}</div>
+                {c.roleTag && <div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.1em"}}>{c.roleTag}</div>}
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                <input
+                  type="number" step="0.5" min="0" max="24"
+                  value={hoursMap[c.id] ?? scheduledHours}
+                  onChange={e => setHoursMap(m => ({...m, [c.id]: parseFloat(e.target.value)||0}))}
+                  style={{...inp, width:"68px", textAlign:"center", padding:"6px 8px"}}
+                />
+                <span style={{fontSize:"10px",color:C.muted,letterSpacing:"0.08em"}}>HRS</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <button onClick={submitHours} style={{...btn("green",true),padding:"14px",fontSize:"12px",letterSpacing:"0.1em"}}>
+        ✓ SUBMIT CREW HOURS
+      </button>
+    </div>
+  );
+}
+
 function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activeShift}) {
   const [tab,setTab]=useState("brief");
   const me = activeShift?.crew.find(c=>c.rosterId===currentUser.id||c.id===currentUser.id);
   const isManager = currentUser.role==="manager";
+  const isCC = me?.roleTag === "CC";
+  const shiftEnded = shiftProgress(activeShift)?.state === "after";
 
   if(!activeShift) return <div style={{...{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontFamily:C.font}}}>No active shift</div>;
 
@@ -2315,17 +2390,31 @@ function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activ
 
       {/* Tabs */}
       <div style={{display:"flex",gap:"4px",padding:"10px 12px",background:C.s1,borderBottom:`1px solid ${C.border}`}}>
-        {["brief","tasks","updates"].map(t=>(
-          <button key={t} onClick={()=>setTab(t)} style={tabBtn(tab===t)}>
-            {t==="brief"?"📋 Brief":t==="tasks"?"✅ Tasks":"📢 Updates"}
+        {[
+          {k:"brief", label:"📋 Brief"},
+          {k:"tasks", label:"✅ Tasks"},
+          {k:"updates", label:"📢 Updates"},
+          ...(isCC ? [{k:"hours", label:"⏱ Hours"}] : []),
+        ].map(t=>(
+          <button key={t.k} onClick={()=>setTab(t.k)} style={{...tabBtn(tab===t.k),
+            ...(t.k==="hours"&&activeShift.ccHoursSubmitted?{color:C.green}:{})}}>
+            {t.label}{t.k==="hours"&&activeShift.ccHoursSubmitted?" ✓":""}
           </button>
         ))}
       </div>
+
+      {isCC && !shiftEnded && tab==="hours" && (
+        <div style={{margin:"16px",padding:"14px",background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"8px"}}>
+          <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",letterSpacing:"0.08em"}}>⏳ SHIFT NOT ENDED YET</div>
+          <div style={{fontSize:"11px",color:C.muted,marginTop:"4px"}}>Hours can be submitted after the shift ends.</div>
+        </div>
+      )}
 
       <div className="bcn-body" style={{paddingBottom:"80px"}}>
         {tab==="brief"&&<BriefTab shift={activeShift} me={me} onConfirm={confirm} onDecline={decline} isManager={isManager} state={state}/>}
         {tab==="tasks"&&<TasksTab shift={activeShift} onToggle={toggleTask} state={state} persist={persist} isManager={isManager}/>}
         {tab==="updates"&&<UpdatesTab shift={activeShift} state={state} persist={persist} isManager={isManager}/>}
+        {tab==="hours"&&isCC&&shiftEnded&&<CCHoursTab shift={activeShift} updateShift={updateShift} currentUser={currentUser}/>}
       </div>
     </div>
   );
