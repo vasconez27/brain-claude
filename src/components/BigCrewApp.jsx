@@ -2275,14 +2275,6 @@ function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activ
         ? {...c, declined:true, declinedAt:now(), confirmed:false, confirmedAt:null} : c),
     }), currentUser.name);
   }
-  function clockIn() {
-    const updated = activeShift.crew.map(c=>(c.rosterId===currentUser.id||c.id===currentUser.id)?{...c,clockIn:now()}:c);
-    persist({...state,shifts:state.shifts.map(s=>s.id===activeShift.id?{...s,crew:updated}:s)});
-  }
-  function clockOut() {
-    const updated = activeShift.crew.map(c=>(c.rosterId===currentUser.id||c.id===currentUser.id)?{...c,clockOut:now()}:c);
-    persist({...state,shifts:state.shifts.map(s=>s.id===activeShift.id?{...s,crew:updated}:s)});
-  }
   function toggleTask(tid) {
     const tasks = activeShift.tasks.map(t=>t.id===tid?{...t,done:!t.done}:t);
     persist({...state,shifts:state.shifts.map(s=>s.id===activeShift.id?{...s,tasks}:s)});
@@ -2292,10 +2284,6 @@ function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activ
     persist({...state, shifts: state.shifts.filter(s=>s.id!==activeShift.id)});
     setScreen("home");
   }
-
-  const clockedIn = me?.clockIn&&!me?.clockOut;
-  const clockedOut = !!me?.clockOut;
-  const hours = me?calcHours(me.clockIn,me.clockOut):{regular:0,ot:0,total:0};
 
   return (
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
@@ -2309,20 +2297,19 @@ function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activ
         </div>
       )}
 
-      {/* Clock bar */}
+      {/* Confirmation status bar */}
       {me && (
-        <div style={{background:clockedIn?C.greenBg:C.s1,borderBottom:`1px solid ${C.border}`,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{background:me.confirmed?C.greenBg:C.s1,borderBottom:`1px solid ${C.border}`,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
-            <span style={lbl}>Clock Status</span>
-            <div style={{fontSize:"13px",fontWeight:"700",color:clockedOut?C.muted:clockedIn?C.green:C.gold}}>
-              {clockedOut?`Out ${fmt(me.clockOut)} · ${fmtHours(hours.total)}`:clockedIn?`On site since ${fmt(me.clockIn)}`:me.confirmed?"Confirmed – not yet clocked in":"Tap Brief to confirm"}
+            <span style={lbl}>Shift Status</span>
+            <div style={{fontSize:"13px",fontWeight:"700",color:me.confirmed?C.green:me.declined?C.red:C.gold}}>
+              {me.confirmed?"CONFIRMED":me.declined?"DECLINED":"AWAITING CONFIRMATION"}
             </div>
-            {clockedIn&&hours.ot>0&&<div style={{fontSize:"10px",color:"#F97316",marginTop:"2px"}}>⚡ {fmtHours(hours.ot)} OT</div>}
           </div>
-          <div style={{display:"flex",gap:"6px"}}>
-            {!me.clockIn&&!clockedOut&&me.confirmed&&<button onClick={clockIn} style={{...btn("green"),padding:"7px 12px",fontSize:"10px"}}>CLOCK IN</button>}
-            {clockedIn&&<button onClick={clockOut} style={{...btn("red"),padding:"7px 12px",fontSize:"10px"}}>CLOCK OUT</button>}
-          </div>
+          {me.confirmed&&(
+            <div style={{fontSize:"10px",fontWeight:"700",color:C.green,letterSpacing:"0.08em",
+              border:`1px solid ${C.green}`,borderRadius:"5px",padding:"4px 8px"}}>✓ CONFIRMED</div>
+          )}
         </div>
       )}
 
