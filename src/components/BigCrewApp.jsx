@@ -15,36 +15,18 @@ async function load() {
   } catch { return null; }
 }
 // Writes are serialized through a promise chain so rapid saves land in order
-// (last write wins) instead of racing each other to the server. `pendingSaves`
-// lets the live-refresh skip pulling stale server data mid-write.
+// (last write wins) instead of racing each other to the server.
 let _saveChain = Promise.resolve();
-let pendingSaves = 0;
 async function save(d) {
   const body = JSON.stringify(d);
-  pendingSaves++;
   _saveChain = _saveChain
     .then(() => fetch("/api/workspace", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body,
     }))
-    .catch(e => console.error(e))
-    .finally(() => { pendingSaves = Math.max(0, pendingSaves - 1); });
+    .catch(e => console.error(e));
   return _saveChain;
-}
-
-// Per-device dismissal of management notifications — kept in localStorage so one
-// person clearing an alert doesn't remove it from the shared data for everyone.
-const DISMISS_KEY = "bigcrew_dismissed_notifs";
-function getDismissedNotifs() {
-  try { return new Set(JSON.parse(localStorage.getItem(DISMISS_KEY) || "[]")); }
-  catch { return new Set(); }
-}
-function dismissNotif(id) {
-  try {
-    const s = getDismissedNotifs(); s.add(id);
-    localStorage.setItem(DISMISS_KEY, JSON.stringify([...s]));
-  } catch {}
 }
 
 // ─── THEME ───────────────────────────────────────────────────────────────────
@@ -79,9 +61,6 @@ function applyTheme(name) {
   const t = THEMES[name] || THEMES.light;
   const root = document.documentElement;
   Object.entries(t).forEach(([k, v]) => root.style.setProperty("--bc-" + k, v));
-  // Make native controls (date/time pickers) match the active theme instead of
-  // always rendering dark — otherwise they look "blacked out" in light mode.
-  root.style.colorScheme = name === "dark" ? "dark" : "light";
   root.dataset.bcTheme = name;
 }
 
@@ -155,7 +134,7 @@ function shiftProgress(shift, now = new Date()) {
 //   → Completed → Paid → Archived
 const STATUS_ORDER = ["draft","open","assigned","awaiting","confirmed","in_progress","completed","paid","archived"];
 const STATUS_META = {
-  draft:       {label:"Draft",             short:"DRAFT",      color:"#71717a", bg:"rgba(113,113,122,0.15)"},
+  draft:       {label:"Draft",             short:"DRAFT",      color:"#71717a", bg:"#1c1c1f"},
   open:        {label:"Open",              short:"OPEN",       color:"#4D9FFF", bg:"rgba(77,159,255,0.12)"},
   assigned:    {label:"Crew Assigned",     short:"ASSIGNED",   color:"#A78BFA", bg:"rgba(167,139,250,0.12)"},
   awaiting:    {label:"Awaiting Confirm",  short:"AWAITING",   color:"#E8C84A", bg:"rgba(232,200,74,0.12)"},
@@ -163,7 +142,7 @@ const STATUS_META = {
   in_progress: {label:"In Progress",       short:"LIVE",       color:"#E8C84A", bg:"rgba(232,200,74,0.18)"},
   completed:   {label:"Completed",         short:"DONE",       color:"#3ECF8E", bg:"rgba(62,207,142,0.10)"},
   paid:        {label:"Paid",              short:"PAID",       color:"#22c55e", bg:"rgba(34,197,94,0.14)"},
-  archived:    {label:"Archived",          short:"ARCHIVED",   color:"#52525b", bg:"rgba(82,82,91,0.15)"},
+  archived:    {label:"Archived",          short:"ARCHIVED",   color:"#52525b", bg:"#161618"},
 };
 
 // Auto-derive a shift's pipeline status from its data + the clock.
@@ -500,7 +479,7 @@ function fmtHour12(h) {
 function parseCalendarPaste(input) {
   if (!input || !input.trim()) return null;
   const txt = input.trim();
-  const result = { client:"", date:"", callTime:"", endTime:"", location:"", address:"", poc:"", pocPhone:"", notes:"", uniform:"", scope:[] };
+  const result = { client:"", date:"", callTime:"", endTime:"", location:"", address:"", poc:"", pocPhone:"", notes:"", scope:[] };
 
   // Try URL first - Google Calendar event URL
   if (/calendar\.google\.com|calendar\.app\.google/i.test(txt)) {
@@ -531,136 +510,74 @@ function parseCalendarPaste(input) {
     } catch(e) { /* fall through to text parsing */ }
   }
 
-  // ── TEXT PARSING ────────────────────────────────────────────────────────
-  // Small extractors that pull structured values out of loose strings.
-  const toDisp = (h, m, ap) => {
-    let hh = parseInt(h, 10);
-    const mm = (m || "00").padStart(2, "0");
-    let suf = (ap || "").toUpperCase();
-    if (!suf) suf = hh >= 12 ? "PM" : "AM";
-    if (hh > 12) { hh -= 12; suf = "PM"; }
-    if (hh === 0) { hh = 12; if (!ap) suf = "AM"; }
-    return `${hh}:${mm} ${suf}`;
-  };
-  const extractTimes = (str) => {
-    const range = str.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|—|to|until|thru|through)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
-    if (range) {
-      const [, h1, m1, ap1, h2, m2, ap2] = range;
-      return { call: toDisp(h1, m1, ap1), end: toDisp(h2, m2, ap2) };
+  // Text parsing — look for common patterns
+  // Date patterns: MM/DD/YYYY, MM-DD-YYYY, "Saturday, May 31, 2026", "May 31"
+  const dateMatch = txt.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (dateMatch) {
+    const [, m, d, y] = dateMatch;
+    result.date = `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
+  } else {
+    // Try "Month DD, YYYY"
+    const monthMatch = txt.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})(?:,?\s+(\d{4}))?/i);
+    if (monthMatch) {
+      const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+      const mIdx = months[monthMatch[1].slice(0,3).toLowerCase()];
+      const d = parseInt(monthMatch[2]);
+      const y = monthMatch[3] ? parseInt(monthMatch[3]) : new Date().getFullYear();
+      if (mIdx !== undefined) {
+        result.date = `${y}-${String(mIdx+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+      }
     }
-    const single = str.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i) || str.match(/\b(\d{1,2}):(\d{2})\b/);
-    if (single) return { call: toDisp(single[1], single[2], single[3]), end: "" };
-    return null;
-  };
-  const extractDate = (str) => {
-    const slash = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-    if (slash) {
-      let [, mo, d, y] = slash;
-      if (y.length === 2) y = "20" + y;
-      return `${y}-${mo.padStart(2,"0")}-${d.padStart(2,"0")}`;
-    }
-    const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
-    const mon = str.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?/i);
-    if (mon) {
-      const mi = months[mon[1].slice(0,3).toLowerCase()];
-      const d = parseInt(mon[2], 10);
-      const y = mon[3] ? parseInt(mon[3], 10) : new Date().getFullYear();
-      if (mi !== undefined) return `${y}-${String(mi+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    }
-    return "";
-  };
-  const extractPhone = (str) => {
-    const m = str.match(/(\+?\d[\d\s().-]{6,}\d)/);
-    return m ? m[1].trim() : "";
-  };
-
-  const lines = txt.split("\n").map(l => l.trim()).filter(Boolean);
-
-  // 1) Labeled fields take priority — "Client:", "Call time:", "Location:", POC,
-  //    Uniform, Notes, Scope. Handles our own blast format and most structured
-  //    pastes. Uniform/Notes/Scope can continue onto following lines.
-  const FIELD = {
-    client:   /^(client|customer|company|account)\b/i,
-    title:    /^(title|event|subject|summary|gig|job)\b/i,
-    date:     /^(date|when|day)\b/i,
-    call:     /^(call\s*time|call|start\s*time|start|time|hours?)\b/i,
-    end:      /^(end\s*time|end|finish|wrap|out)\b/i,
-    location: /^(location|where|venue|site|loc)\b/i,
-    address:  /^(address|addr)\b/i,
-    poc:      /^(point\s*of\s*contact|poc|contact|supervisor|lead|on[\s-]?site)\b/i,
-    phone:    /^(phone|cell|mobile|tel|number|ph)\b/i,
-    uniform:  /^(uniform|dress|attire|wear)\b/i,
-    scope:    /^(scope|tasks?|work|sow)\b/i,
-    notes:    /^(notes?|details|description|info|instructions)\b/i,
-  };
-
-  let capture = null; // active multi-line field: "uniform" | "notes" | "scope"
-  const consumed = new Set();
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // Standalone bullet → scope item.
-    if (/^[•*\-–·]\s+/.test(line)) {
-      const item = line.replace(/^[•*\-–·]\s+/, "").trim();
-      if (item) result.scope.push(item);
-      consumed.add(i); capture = "scope";
-      continue;
-    }
-
-    const colon = line.indexOf(":");
-    const label = colon > 0 && colon <= 40 ? line.slice(0, colon).toLowerCase().trim() : "";
-    const value = colon > 0 ? line.slice(colon + 1).trim() : "";
-    const isLabel = label && Object.values(FIELD).some(rx => rx.test(label));
-
-    if (isLabel) {
-      consumed.add(i); capture = null;
-      if (FIELD.client.test(label) || FIELD.title.test(label)) { if (!result.client && value) result.client = value; }
-      else if (FIELD.date.test(label)) { const d = extractDate(value); if (d) result.date = d; const t = extractTimes(value); if (t) { if (!result.callTime) result.callTime = t.call; if (t.end && !result.endTime) result.endTime = t.end; } }
-      else if (FIELD.end.test(label)) { const t = extractTimes(value); if (t) result.endTime = t.call; }
-      else if (FIELD.call.test(label)) { const t = extractTimes(value); if (t) { result.callTime = t.call; if (t.end) result.endTime = t.end; } }
-      else if (FIELD.address.test(label)) { if (value) { result.address = value; if (!result.location) result.location = value.split(",")[0].trim(); } }
-      else if (FIELD.location.test(label)) { if (value) { result.location = value.split(",")[0].trim(); if (!result.address && /\d/.test(value)) result.address = value; } }
-      else if (FIELD.poc.test(label)) { const ph = extractPhone(value); if (ph) result.pocPhone = ph; const nm = value.replace(ph, "").replace(/^[\s,\-–—·|]+|[\s,\-–—·|]+$/g, "").trim(); if (nm) result.poc = nm; }
-      else if (FIELD.phone.test(label)) { const ph = extractPhone(value) || value; if (ph) result.pocPhone = ph; }
-      else if (FIELD.uniform.test(label)) { if (value) result.uniform = value; capture = "uniform"; }
-      else if (FIELD.scope.test(label)) { if (value) result.scope.push(value); capture = "scope"; }
-      else if (FIELD.notes.test(label)) { if (value) result.notes = value; capture = "notes"; }
-      continue;
-    }
-
-    // Continuation of a multi-line labeled field. (Scope only grows from bullet
-    // lines, handled above — so trailing prose falls through to notes instead.)
-    if (capture === "uniform") { result.uniform = result.uniform ? result.uniform + " " + line : line; consumed.add(i); continue; }
-    if (capture === "notes")   { result.notes = result.notes ? result.notes + "\n" + line : line; consumed.add(i); continue; }
   }
 
-  // 2) Global fallbacks for anything the labels didn't catch.
-  if (!result.date) { const d = extractDate(txt); if (d) result.date = d; }
-  if (!result.callTime) { const t = extractTimes(txt); if (t) { result.callTime = t.call; if (t.end) result.endTime = t.end; } }
-
-  if (!result.location) {
-    const at = lines.find((l, i) => !consumed.has(i) && /^@\s*/.test(l));
-    if (at) { const v = at.replace(/^@\s*/, ""); result.location = v.split(",")[0].trim(); if (v.includes(",")) result.address = v; }
+  // Time range: "3pm - 12am", "3:00 PM to 12:00 AM", "15:00-00:00"
+  const timeRange = txt.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|to|–|—|until|until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if (timeRange) {
+    const [, h1, m1, ap1, h2, m2, ap2] = timeRange;
+    const toDisp = (h, m, ap) => {
+      let hh = parseInt(h);
+      const mm = m || "00";
+      let suf = (ap || "").toUpperCase();
+      if (!suf) suf = hh >= 12 ? "PM" : "AM";
+      if (hh > 12) { hh -= 12; suf = "PM"; }
+      if (hh === 0) { hh = 12; suf = "AM"; }
+      return `${hh}:${mm} ${suf}`;
+    };
+    result.callTime = toDisp(h1, m1, ap1);
+    result.endTime = toDisp(h2, m2, ap2);
   }
 
-  // Title: first “wordy” line that isn't a date/time/bullet/number.
-  if (!result.client) {
-    const cand = lines.find((l, i) => !consumed.has(i) && !/^[•*\-–·@\d]/.test(l) && !extractDate(l) && !extractTimes(l) && l.length <= 80);
-    if (cand) result.client = cand;
+  // Title — usually first non-empty line, before any date/time
+  const lines = txt.split("\n").map(l=>l.trim()).filter(Boolean);
+  if (lines.length > 0 && !result.client) {
+    // First line that's not just a date or time
+    for (const line of lines) {
+      if (!/^\d/.test(line) && line.length < 80) {
+        result.client = line;
+        break;
+      }
+    }
   }
 
-  // Notes: leftover instruction-like lines (not labels/dates/times/crew numbers).
-  if (!result.notes) {
-    const leftovers = lines.filter((l, i) =>
-      !consumed.has(i) &&
-      l !== result.client &&
-      !/^[•*\-–·@]/.test(l) &&
-      !/^\d+[.)]/.test(l) &&
-      !extractDate(l) && !extractTimes(l) &&
-      l.indexOf(":") === -1
-    );
-    if (leftovers.length) result.notes = leftovers.join("\n");
+  // Location: line containing "@" or following "Location:" or "Where:"
+  for (const line of lines) {
+    if (/^(location|where|venue|address):/i.test(line)) {
+      const v = line.replace(/^[^:]+:/, "").trim();
+      result.address = v;
+      result.location = v.split(",")[0];
+      break;
+    }
+    if (line.startsWith("@ ") || line.startsWith("@")) {
+      result.location = line.replace(/^@\s*/, "");
+      break;
+    }
+  }
+
+  // Notes — everything else
+  const skipPatterns = [/^\d/, /^(location|where|venue|address|when|date|time):/i];
+  const noteLines = lines.filter(l => l !== result.client && !skipPatterns.some(p => p.test(l)));
+  if (noteLines.length > 0 && !result.notes) {
+    result.notes = noteLines.join("\n");
   }
 
   return result;
@@ -1033,9 +950,6 @@ const INIT = {
   expenses: [],
   // Manager-added custom role tags beyond the defaults
   customRoleTags: [],
-  // Account user IDs the manager has removed from the roster — the server-side
-  // merge skips these so a deleted crew member doesn't auto-reappear.
-  removedUserIds: [],
 };
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
@@ -1116,20 +1030,18 @@ function SearchableNameDropdown({options, onSelect, placeholder="Type a name…"
 }
 
 // Time input that handles AM/PM display – internally 24-hour, displays 12-hour
-function TimeInput({value, onChange}) {
-  // value is stored as "3:00 PM" format; <input type="time"> wants "HH:MM" 24-hour.
-  // The right-hand chip mirrors the *actual* selected time (or "Not set") rather
-  // than a misleading fixed default.
+function TimeInput({value, onChange, placeholder="3:00 PM"}) {
+  // value is stored as "3:00 PM" format; <input type="time"> wants "HH:MM" 24-hour
   return (
     <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
       <input
         type="time"
         value={to24Hour(value)}
         onChange={e=>onChange(from24Hour(e.target.value))}
-        style={{...inp,flex:1}}
+        style={{...inp,flex:1,colorScheme:"dark"}}
       />
-      <div style={{fontSize:"11px",color:value?C.text:C.dim,minWidth:"64px",textAlign:"right",fontWeight:"700"}}>
-        {value || "Not set"}
+      <div style={{fontSize:"11px",color:C.muted,minWidth:"60px",textAlign:"right",fontWeight:"600"}}>
+        {value || placeholder}
       </div>
     </div>
   );
@@ -1408,7 +1320,7 @@ function DailyTimeline({shifts, currentUserRosterId}) {
               borderRadius:"3px",
               padding:"2px 4px",
               fontSize:"9px",
-              color: isActive ? C.onaccent : C.gold,
+              color: isActive ? "#000" : C.gold,
               fontWeight:"700",
               overflow:"hidden",
               whiteSpace:"nowrap",
@@ -1581,12 +1493,12 @@ function HoursAdjustModal({member, shiftClient, onSave, onClose}) {
         {/* Breakdown */}
         <div style={{background:C.s2,borderRadius:"7px",padding:"10px",marginBottom:"14px"}}>
           <div style={{display:"flex",justifyContent:"space-between",padding:"3px 0",fontSize:"11px"}}>
-            <span style={{color:C.muted}}>Regular</span>
+            <span style={{color:C.muted}}>Regular (up to {OT_THRESHOLD_HOURS}h)</span>
             <span style={{color:C.text,fontWeight:"700"}}>{fmtHours(reg)}</span>
           </div>
           {ot > 0 && (
             <div style={{display:"flex",justifyContent:"space-between",padding:"3px 0",fontSize:"11px"}}>
-              <span style={{color:C.gold}}>Overtime</span>
+              <span style={{color:C.gold}}>Overtime (over {OT_THRESHOLD_HOURS}h)</span>
               <span style={{color:C.gold,fontWeight:"700"}}>{fmtHours(ot)}</span>
             </div>
           )}
@@ -1625,7 +1537,6 @@ export default function App({ sessionUser = null }) {
   // Single source of truth for dark/light across the WHOLE site (next-themes).
   const { theme, setTheme } = useTheme();
   const autoLoggedIn = useRef(false);
-  const lastSyncRef = useRef(null); // signature of last-applied server state
 
   // Apply the demo's CSS variables whenever the shared theme changes.
   useEffect(()=>{
@@ -1634,39 +1545,10 @@ export default function App({ sessionUser = null }) {
 
   useEffect(()=>{
     load().then(saved=>{
-      if(saved){ setState(s=>({...INIT,...saved})); lastSyncRef.current = JSON.stringify(saved); }
+      if(saved) setState(s=>({...INIT,...saved}));
       setLoaded(true);
     });
   },[]);
-
-  // Live sync — this is a real shared app, not a demo. Pull the latest shared
-  // workspace so changes a manager makes (removing staff, editing a shift, etc.)
-  // show up for crew without a manual reload. Runs on tab focus and on a short
-  // interval, and skips while a local save is in flight so it never clobbers an
-  // optimistic change with stale server data.
-  useEffect(()=>{
-    if(!loaded) return;
-    let cancelled = false;
-    async function refresh(){
-      if(pendingSaves > 0) return;
-      const d = await load();
-      if(cancelled || !d || pendingSaves > 0) return;
-      const sig = JSON.stringify(d);
-      if(sig === lastSyncRef.current) return; // nothing changed — don't re-render
-      lastSyncRef.current = sig;
-      setState(s => ({...s, ...d}));
-    }
-    const onVisible = () => { if(document.visibilityState === "visible") refresh(); };
-    const id = setInterval(refresh, 10000);
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  },[loaded]);
 
   // Auto-login from the real NextAuth session — skips the demo's own login
   // screen entirely. Role decides which portal opens (manager vs crew).
@@ -1675,16 +1557,10 @@ export default function App({ sessionUser = null }) {
     if(sessionUser.role === "manager"){
       setCurrentUser({ id:"manager", name:sessionUser.name || "Manager", role:"manager" });
     } else {
-      // Link to the synced roster entry by account id/email (exact), falling
-      // back to name. Synced entries use the account id as their roster id.
-      const emailLc = (sessionUser.email||"").toLowerCase();
-      const match = state.roster?.find(m =>
-        (sessionUser.id && (m.userId===sessionUser.id || m.id===sessionUser.id)) ||
-        (emailLc && m.email && m.email.toLowerCase()===emailLc) ||
-        (m.name||"").toLowerCase() === (sessionUser.name||"").toLowerCase()
-      );
+      // Try to match a roster member by name; otherwise use a synthetic crew id.
+      const match = state.roster?.find(m => (m.name||"").toLowerCase() === (sessionUser.name||"").toLowerCase());
       if(match) setCurrentUser({ id:match.id, name:match.name, role:"crew", rosterId:match.id });
-      else setCurrentUser({ id:sessionUser.id||"me", name:sessionUser.name || "Crew", role:"crew", rosterId:sessionUser.id||"me" });
+      else setCurrentUser({ id:"me", name:sessionUser.name || "Crew", role:"crew", rosterId:"me" });
     }
     autoLoggedIn.current = true;
     setScreen("home");
@@ -1699,7 +1575,7 @@ export default function App({ sessionUser = null }) {
 
   const persist = useCallback((newState) => {
     setState(newState);
-    save({roster:newState.roster,shifts:newState.shifts,notifications:newState.notifications,availability:newState.availability,expenses:newState.expenses||[],customRoleTags:newState.customRoleTags||[],removedUserIds:newState.removedUserIds||[]});
+    save({roster:newState.roster,shifts:newState.shifts,notifications:newState.notifications,availability:newState.availability,expenses:newState.expenses||[],customRoleTags:newState.customRoleTags||[]});
   },[]);
 
   // Helper: update a single shift and auto-stamp lastUpdated.
@@ -1712,7 +1588,7 @@ export default function App({ sessionUser = null }) {
         return { ...updated, lastUpdated: now(), updatedBy: updatedByName || "" };
       });
       const ns = { ...prevState, shifts: newShifts };
-      save({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedUserIds:ns.removedUserIds||[]});
+      save({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[]});
       return ns;
     });
   },[]);
@@ -1995,7 +1871,7 @@ function ManagerOpsOverview({state, setScreen, setActiveShiftId}) {
 
       {/* Alerts */}
       {(openPositions>0 || declinedCount>0) && (
-        <div style={{...card({background:C.goldBg,border:`1px solid ${C.goldDim}`,marginBottom:"10px"})}}>
+        <div style={{...card({background:"#1a1400",border:`1px solid ${C.goldDim}`,marginBottom:"10px"})}}>
           <div style={{fontSize:"10px",color:C.gold,fontWeight:"700",letterSpacing:"0.08em",marginBottom:"4px"}}>⚠️ NEEDS ATTENTION</div>
           <div style={{fontSize:"11px",color:C.text,lineHeight:"1.5"}}>
             {openPositions>0 && <div>· {openPositions} open position{openPositions>1?"s":""} still unfilled</div>}
@@ -2108,9 +1984,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
   const myCrewEntry = activeShift?.crew.find(c=>c.rosterId===currentUser.id||c.id===currentUser.id);
 
   // Unread notifications
-  const [dismissed, setDismissed] = useState(()=>getDismissedNotifs());
-  function handleDismiss(id){ dismissNotif(id); setDismissed(getDismissedNotifs()); }
-  const myNotifs = state.notifications.filter(n=>(n.to===currentUser.id||n.to==="all") && !dismissed.has(n.id)).slice(0,3);
+  const myNotifs = state.notifications.filter(n=>n.to===currentUser.id||n.to==="all").slice(0,3);
 
   return (
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
@@ -2143,8 +2017,6 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
                   <div style={{fontSize:"12px",color:C.text,lineHeight:"1.4"}}>{n.text}</div>
                   <div style={{fontSize:"9px",color:C.dim,marginTop:"4px"}}>{fmt(n.ts)}</div>
                 </div>
-                <button onClick={()=>handleDismiss(n.id)} aria-label="Dismiss"
-                  style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:"15px",lineHeight:1,padding:"2px 4px",flexShrink:0}}>✕</button>
               </div>
             ))}
           </div>
@@ -2157,7 +2029,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
 
         {/* Next Shift Hero — only when the user is personally on this shift */}
         {activeShift && myCrewEntry && (
-          <div style={{background:C.goldBg,border:`1.5px solid ${C.gold}`,borderRadius:"12px",padding:"16px",marginBottom:"12px",cursor:"pointer"}}
+          <div style={{background:`linear-gradient(135deg,${C.goldBg},#0a0a00)`,border:`1.5px solid ${C.gold}`,borderRadius:"12px",padding:"16px",marginBottom:"12px",cursor:"pointer"}}
             onClick={()=>setScreen("shift")}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
               <div>
@@ -2267,8 +2139,6 @@ function CCHoursTab({shift, updateShift, currentUser}) {
     return m;
   });
 
-  const alreadyDone = !!shift.ccHoursSubmitted;
-
   function submitHours() {
     updateShift(shift.id, s => ({
       ...s,
@@ -2279,15 +2149,13 @@ function CCHoursTab({shift, updateShift, currentUser}) {
     }), currentUser.name);
   }
 
-  if (alreadyDone) {
+  if (shift.ccHoursSubmitted) {
     return (
       <div style={{textAlign:"center",padding:"36px 20px"}}>
         <div style={{fontSize:"36px",marginBottom:"8px"}}>✅</div>
         <div style={{fontSize:"14px",fontWeight:"700",color:C.green,marginBottom:"4px"}}>Hours Submitted</div>
-        <div style={{fontSize:"11px",color:C.muted}}>
-          By {shift.ccSubmittedBy} · {shift.ccSubmittedAt ? fmt(shift.ccSubmittedAt) : ""}
-        </div>
-        <div style={{fontSize:"10px",color:C.dim,marginTop:"8px"}}>Manager can still adjust individual hours if needed.</div>
+        <div style={{fontSize:"11px",color:C.muted}}>By {shift.ccSubmittedBy} · {shift.ccSubmittedAt?fmt(shift.ccSubmittedAt):""}</div>
+        <div style={{fontSize:"10px",color:C.dim,marginTop:"8px"}}>Manager can still adjust individual entries if needed.</div>
       </div>
     );
   }
@@ -2305,15 +2173,13 @@ function CCHoursTab({shift, updateShift, currentUser}) {
               padding:"10px 12px",background:C.s2,border:`1px solid ${C.border}`,borderRadius:"8px"}}>
               <div>
                 <div style={{fontSize:"13px",fontWeight:"700",color:C.text}}>{c.name}</div>
-                {c.roleTag && <div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.1em"}}>{c.roleTag}</div>}
+                {c.roleTag&&<div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.1em"}}>{c.roleTag}</div>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                <input
-                  type="number" step="0.5" min="0" max="24"
+                <input type="number" step="0.5" min="0" max="24"
                   value={hoursMap[c.id] ?? scheduledHours}
-                  onChange={e => setHoursMap(m => ({...m, [c.id]: parseFloat(e.target.value)||0}))}
-                  style={{...inp, width:"68px", textAlign:"center", padding:"6px 8px"}}
-                />
+                  onChange={e=>setHoursMap(m=>({...m,[c.id]:parseFloat(e.target.value)||0}))}
+                  style={{...inp,width:"68px",textAlign:"center",padding:"6px 8px"}}/>
                 <span style={{fontSize:"10px",color:C.muted,letterSpacing:"0.08em"}}>HRS</span>
               </div>
             </div>
@@ -2388,40 +2254,50 @@ function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activ
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs — Brief + Tasks always; ⏱ Hours pops in for CC after shift ends */}
       <div style={{display:"flex",gap:"4px",padding:"10px 12px",background:C.s1,borderBottom:`1px solid ${C.border}`}}>
         {[
           {k:"brief", label:"📋 Brief"},
           {k:"tasks", label:"✅ Tasks"},
-          {k:"updates", label:"📢 Updates"},
-          ...(isCC ? [{k:"hours", label:"⏱ Hours"}] : []),
+          ...(isCC && shiftEnded ? [{k:"hours", label:activeShift.ccHoursSubmitted?"⏱ Hours ✓":"⏱ Hours"}] : []),
         ].map(t=>(
           <button key={t.k} onClick={()=>setTab(t.k)} style={{...tabBtn(tab===t.k),
-            ...(t.k==="hours"&&activeShift.ccHoursSubmitted?{color:C.green}:{})}}>
-            {t.label}{t.k==="hours"&&activeShift.ccHoursSubmitted?" ✓":""}
+            ...(t.k==="hours"&&activeShift.ccHoursSubmitted&&tab!==t.k?{color:C.green}:{})}}>
+            {t.label}
           </button>
         ))}
       </div>
 
-      {isCC && !shiftEnded && tab==="hours" && (
-        <div style={{margin:"16px",padding:"14px",background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"8px"}}>
-          <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",letterSpacing:"0.08em"}}>⏳ SHIFT NOT ENDED YET</div>
-          <div style={{fontSize:"11px",color:C.muted,marginTop:"4px"}}>Hours can be submitted after the shift ends.</div>
-        </div>
-      )}
-
       <div className="bcn-body" style={{paddingBottom:"80px"}}>
-        {tab==="brief"&&<BriefTab shift={activeShift} me={me} onConfirm={confirm} onDecline={decline} isManager={isManager} state={state}/>}
+        {tab==="brief"&&<BriefTab shift={activeShift} me={me} onConfirm={confirm} onDecline={decline} isManager={isManager} state={state} persist={persist}/>}
         {tab==="tasks"&&<TasksTab shift={activeShift} onToggle={toggleTask} state={state} persist={persist} isManager={isManager}/>}
-        {tab==="updates"&&<UpdatesTab shift={activeShift} state={state} persist={persist} isManager={isManager}/>}
         {tab==="hours"&&isCC&&shiftEnded&&<CCHoursTab shift={activeShift} updateShift={updateShift} currentUser={currentUser}/>}
       </div>
     </div>
   );
 }
 
-function BriefTab({shift,me,onConfirm,onDecline,isManager,state}) {
+function BriefTab({shift,me,onConfirm,onDecline,isManager,state,persist}) {
   const [step,setStep]=useState(false);
+  const [msg,setMsg]=useState("");
+  const [duration,setDuration]=useState("forever");
+  const [, forceRender] = useState(0);
+  useEffect(()=>{const t=setInterval(()=>forceRender(n=>n+1),30000);return()=>clearInterval(t);},[]);
+
+  function durationToMs(d){if(d==="1h")return 3600000;if(d==="4h")return 4*3600000;if(d==="24h")return 24*3600000;if(d==="7d")return 7*24*3600000;return null;}
+  function postUpdate(){
+    if(!msg.trim()) return;
+    const expMs=durationToMs(duration);
+    const ann={id:uid(),text:msg.trim(),ts:now(),from:"Management",expiresAt:expMs?now()+expMs:null,duration};
+    const notif={id:uid(),to:"all",text:msg.trim(),ts:now(),shiftId:shift.id};
+    persist({...state,shifts:state.shifts.map(s=>s.id===shift.id?{...s,announcements:[ann,...s.announcements],lastUpdated:now()}:s),notifications:[notif,...state.notifications]});
+    setMsg("");setDuration("forever");
+  }
+  function isExpired(a){return a.expiresAt&&Date.now()>a.expiresAt;}
+  function timeLeft(a){if(!a.expiresAt)return null;const ms=a.expiresAt-Date.now();if(ms<=0)return"expired";const h=ms/3600000;if(h<1)return`${Math.ceil(ms/60000)}m left`;if(h<24)return`${Math.ceil(h)}h left`;return`${Math.ceil(h/24)}d left`;}
+
+  const durationOpts=[{key:"1h",label:"1h"},{key:"4h",label:"4h"},{key:"24h",label:"24h"},{key:"7d",label:"7d"},{key:"forever",label:"∞"}];
+  const activeAnnouncements = shift.announcements.filter(a=>!isExpired(a));
   return (
     <div style={{display:"flex",flexDirection:"column",gap:"10px",animation:"fadeUp 0.3s ease"}}>
       {/* Status + fill */}
@@ -2479,9 +2355,9 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state}) {
         </div>
       )}
       {/* Notes */}
-      <div style={{background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"10px",padding:"12px",display:"flex",gap:"10px"}}>
+      <div style={{background:"#1a1400",border:`1px solid ${C.goldDim}`,borderRadius:"10px",padding:"12px",display:"flex",gap:"10px"}}>
         <span style={{fontSize:"18px"}}>⚠️</span>
-        <div style={{fontSize:"12px",color:C.text,lineHeight:"1.6"}}>{shift.notes}</div>
+        <div style={{fontSize:"12px",color:"#d4cfbf",lineHeight:"1.6"}}>{shift.notes}</div>
       </div>
       {/* Details */}
       {[
@@ -2514,14 +2390,14 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state}) {
         {shift.scope.map((item,i)=>(
           <div key={i} style={{display:"flex",gap:"10px",alignItems:"flex-start",marginTop:"8px"}}>
             <div style={{width:"18px",height:"18px",background:C.greenBg,border:`1px solid ${C.green}`,borderRadius:"4px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",color:C.green,flexShrink:0}}>✓</div>
-            <div style={{fontSize:"12px",color:C.text,lineHeight:"1.5"}}>{item}</div>
+            <div style={{fontSize:"12px",color:"#c8d4c4",lineHeight:"1.5"}}>{item}</div>
           </div>
         ))}
       </div>
       {/* Uniform */}
-      <div style={{...card({background:C.s2,border:`1px solid ${C.borderHi}`})}} >
+      <div style={{...card({background:"#0e0e14",border:`1px solid #2a2a3a`})}} >
         <span style={lbl}>👕 Uniform</span>
-        <div style={{fontSize:"12px",color:C.text,lineHeight:"1.6"}}>{shift.uniform}</div>
+        <div style={{fontSize:"12px",color:"#c8c4d4",lineHeight:"1.6"}}>{shift.uniform}</div>
       </div>
       {/* Crew List */}
       <div style={card()}>
@@ -2586,6 +2462,47 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state}) {
           })}
         </div>
       </div>
+
+      {/* Management Updates — shown to all crew inside Brief */}
+      {(activeAnnouncements.length > 0 || isManager) && (
+        <div>
+          <span style={lbl}>📢 Management Updates</span>
+
+          {isManager && (
+            <div style={{...card({marginBottom:"10px"})}}>
+              <textarea value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Post a quick update to crew..."
+                style={{...inp,minHeight:"70px",resize:"vertical",marginBottom:"8px"}}/>
+              <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"10px",flexWrap:"wrap"}}>
+                <span style={{fontSize:"10px",color:C.muted,letterSpacing:"0.1em"}}>EXPIRES IN:</span>
+                {durationOpts.map(o=>(
+                  <button key={o.key} onClick={()=>setDuration(o.key)} style={{
+                    padding:"5px 10px",fontSize:"10px",fontWeight:"700",
+                    background:duration===o.key?C.gold:"transparent",
+                    color:duration===o.key?C.onaccent:C.gold,
+                    border:`1px solid ${C.gold}`,borderRadius:"5px",cursor:"pointer",fontFamily:C.font,
+                  }}>{o.label}</button>
+                ))}
+              </div>
+              <button onClick={postUpdate} disabled={!msg.trim()} style={{...btn("gold",true),opacity:msg.trim()?1:0.5}}>📢 POST UPDATE</button>
+            </div>
+          )}
+
+          {activeAnnouncements.length===0 && isManager && (
+            <div style={{textAlign:"center",color:C.muted,fontSize:"11px",padding:"10px 0"}}>No updates posted yet</div>
+          )}
+          <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+            {activeAnnouncements.map(a=>(
+              <div key={a.id} style={{...card({background:C.goldBg,border:`1px solid ${C.goldDim}`})}}>
+                <div style={{fontSize:"10px",color:C.gold,fontWeight:"700",letterSpacing:"0.1em",marginBottom:"4px"}}>
+                  FROM MANAGEMENT {timeLeft(a)?`· ${timeLeft(a)}`:""}
+                </div>
+                <div style={{fontSize:"12px",color:C.text,lineHeight:"1.5"}}>{a.text}</div>
+                <div style={{fontSize:"9px",color:C.dim,marginTop:"4px"}}>{fmt(a.ts)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2760,7 +2677,7 @@ function UpdatesTab({shift,state,persist,isManager}) {
               <button key={o.key} onClick={()=>setDuration(o.key)} style={{
                 padding:"5px 10px",fontSize:"10px",fontWeight:"700",letterSpacing:"0.08em",
                 background: duration===o.key ? C.gold : "transparent",
-                color: duration===o.key ? C.onaccent : C.gold,
+                color: duration===o.key ? "#000" : C.gold,
                 border:`1px solid ${C.gold}`,borderRadius:"5px",cursor:"pointer",fontFamily:C.font,
               }}>{o.label}</button>
             ))}
@@ -2785,7 +2702,7 @@ function UpdatesTab({shift,state,persist,isManager}) {
                     <button key={o.key} onClick={()=>setEditDuration(o.key)} style={{
                       padding:"4px 8px",fontSize:"9px",
                       background: editDuration===o.key ? C.gold : "transparent",
-                      color: editDuration===o.key ? C.onaccent : C.gold,
+                      color: editDuration===o.key ? "#000" : C.gold,
                       border:`1px solid ${C.gold}`,borderRadius:"4px",cursor:"pointer",fontFamily:C.font,
                     }}>{o.label}</button>
                   ))}
@@ -3083,8 +3000,8 @@ function HoursScreen({state,persist,updateShift,setScreen,currentUser,activeShif
                     )}
                     <div style={{marginTop:"8px"}}>
                       <button onClick={()=>{setAdjustingMember(e.crew);setAdjustingShift(e.shift);}}
-                        style={{...btn("ghost"),padding:"6px 12px",fontSize:"10px",border:`1px solid ${C.gold}`,color:C.gold}}>
-                        ✎ ENTER / EDIT HOURS
+                        style={{...btn("ghost"),padding:"5px 10px",fontSize:"10px",border:`1px solid ${C.border}`,color:C.muted}}>
+                        ✏ ADJUST HOURS
                       </button>
                     </div>
                   </div>
@@ -3340,7 +3257,7 @@ function AvailabilityScreen({state,persist,setScreen,currentUser,embedded}) {
                   <div style={{display:"flex",flexDirection:"column",gap:"8px",marginTop:"8px"}}>
                     <div>
                       <div style={{fontSize:"9px",color:C.dim,marginBottom:"3px"}}>DATE</div>
-                      <input type="date" value={rangeDate} onChange={e=>setRangeDate(e.target.value)} style={{...inp}}/>
+                      <input type="date" value={rangeDate} onChange={e=>setRangeDate(e.target.value)} style={{...inp,colorScheme:"dark"}}/>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
                       <div>
@@ -3368,7 +3285,7 @@ function AvailabilityScreen({state,persist,setScreen,currentUser,embedded}) {
                 <button key={v.key} onClick={()=>setManagerView(v.key)} style={{
                   flex:1,padding:"8px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.08em",
                   background: managerView===v.key ? C.gold : "transparent",
-                  color: managerView===v.key ? C.onaccent : C.muted,
+                  color: managerView===v.key ? "#000" : C.muted,
                   border: `1px solid ${managerView===v.key ? C.gold : C.border}`,
                   borderRadius:"6px",cursor:"pointer",fontFamily:C.font,
                 }}>{v.label}</button>
@@ -3519,7 +3436,7 @@ function AvailabilityScreen({state,persist,setScreen,currentUser,embedded}) {
 // ══════════════════════════════════════════════════════════════════════════════
 // WEEKLY SCHEDULE GRID – visual 7-day × hourly view (managers)
 // ══════════════════════════════════════════════════════════════════════════════
-function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUser}) {
+function WeekGridScreen({state, setScreen, setActiveShiftId, embedded}) {
   const [weekStart, setWeekStart] = useState(getWeekStart(new Date()));
 
   // 7 days starting Monday
@@ -3574,7 +3491,7 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUs
   }
 
   // Client → color
-  const palette = ["#E8C84A", C.green, C.blue, C.purple, "#F97316", "#EC4899", "#06B6D4"];
+  const palette = [C.gold, C.green, C.blue, C.purple, "#F97316", "#EC4899", "#06B6D4"];
   const clientColor = (client) => {
     let h = 0;
     for(let i=0;i<client.length;i++) h = (h*31 + client.charCodeAt(i)) >>> 0;
@@ -3613,17 +3530,13 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUs
             style={{...btn("ghost"),padding:"7px 12px",fontSize:"11px",border:`1px solid ${C.border}`}}>Next Week ›</button>
         </div>
 
-        {/* Stats — "Crew Bookings" is a manager-only metric */}
-        {(() => {
-          const isManager = currentUser?.role === "manager";
-          const stats = [
+        {/* Stats */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"14px"}}>
+          {[
             {label:"Shifts",value:totalShiftsThisWeek,color:C.gold,icon:"📅"},
-            ...(isManager ? [{label:"Crew Bookings",value:totalCrewBookings,color:C.green,icon:"👥"}] : []),
+            {label:"Crew Bookings",value:totalCrewBookings,color:C.green,icon:"👥"},
             {label:"Days w/ Work",value:days.filter(d=>shiftsOn(d).length>0).length,color:C.blue,icon:"⚡"},
-          ];
-          return (
-        <div style={{display:"grid",gridTemplateColumns:`repeat(${stats.length},1fr)`,gap:"8px",marginBottom:"14px"}}>
-          {stats.map(s=>(
+          ].map(s=>(
             <div key={s.label} style={{...card({textAlign:"center",padding:"10px 6px"})}}>
               <div style={{fontSize:"18px",marginBottom:"2px"}}>{s.icon}</div>
               <div style={{fontSize:"18px",fontWeight:"700",color:s.color}}>{s.value}</div>
@@ -3631,8 +3544,6 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUs
             </div>
           ))}
         </div>
-          );
-        })()}
 
         {/* Grid */}
         <div style={{...card({padding:"0",overflow:"hidden"})}}>
@@ -3771,18 +3682,6 @@ function NoShiftEmptyState({title, setScreen}) {
             <button onClick={()=>setScreen("home")} style={{...btn("ghost"),padding:"11px 20px",border:`1px solid ${C.border}`}}>← HOME</button>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// Compact inline notice for admin tabs that need a shift selected.
-function ShiftNeededNotice({setScreen}) {
-  return (
-    <div style={{textAlign:"center",color:C.muted,fontSize:"12px",padding:"30px 20px",border:`1px dashed ${C.border}`,borderRadius:"10px",lineHeight:"1.6",animation:"fadeUp 0.3s ease"}}>
-      This view needs a shift selected.<br/>Pick one from the schedule, or create a new shift.
-      <div style={{marginTop:"12px"}}>
-        <button onClick={()=>setScreen("newshift")} style={{...btn("gold"),padding:"9px 16px"}}>+ CREATE A SHIFT</button>
       </div>
     </div>
   );
@@ -3947,7 +3846,7 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
           {[{k:"blast",l:"📋 Shift Blast"},{k:"custom",l:"✏️ Custom Note"}].map(o=>(
             <button key={o.k} onClick={()=>setMsgMode(o.k)} style={{
               flex:1,padding:"9px 6px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.04em",
-              background: msgMode===o.k ? C.gold : "transparent", color: msgMode===o.k ? C.onaccent : C.muted,
+              background: msgMode===o.k ? C.gold : "transparent", color: msgMode===o.k ? "#000" : C.muted,
               border:"none",borderRadius:"6px",cursor:"pointer",fontFamily:C.font,
             }}>{o.l}</button>
           ))}
@@ -3961,17 +3860,6 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
               style={{...inp,minHeight:"120px",resize:"vertical"}}/>
           </div>
         )}
-
-        {/* Live preview — pinned to the top so it stays in place while you edit */}
-        <div style={{...card({border:`1.5px solid ${C.gold}`}),position:"sticky",top:"56px",zIndex:30,marginBottom:"12px"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
-            <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",letterSpacing:"0.12em"}}>📨 LIVE PREVIEW</div>
-            <div style={{fontSize:"9px",color:C.muted}}>{messageText.length} chars</div>
-          </div>
-          <div style={{background:C.s2,borderRadius:"7px",padding:"12px",fontSize:"12px",lineHeight:"1.7",color:C.text,whiteSpace:"pre-wrap",fontFamily:"'Courier New',monospace",maxHeight:"240px",overflowY:"auto",border:`1px solid ${C.border}`}}>
-            {messageText}
-          </div>
-        </div>
 
         <div className="bcn-row-side">
           {/* ── LEFT: STRUCTURED EDITOR ── */}
@@ -4091,8 +3979,18 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
             </button>
           </div>
 
-          {/* ── RIGHT: SEND ── */}
+          {/* ── RIGHT: LIVE PREVIEW + SEND ── */}
           <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+            <div style={{...card({border:`1.5px solid ${C.gold}`,position:"sticky",top:"80px"})}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+                <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",letterSpacing:"0.12em"}}>📨 LIVE PREVIEW</div>
+                <div style={{fontSize:"9px",color:C.muted}}>{messageText.length} chars</div>
+              </div>
+              <div style={{background:"#0a0a00",borderRadius:"7px",padding:"14px",fontSize:"12px",lineHeight:"1.8",color:C.text,whiteSpace:"pre-wrap",fontFamily:"'Courier New',monospace",maxHeight:"480px",overflowY:"auto",border:`1px solid ${C.border}`}}>
+                {messageText}
+              </div>
+            </div>
+
             {/* Send buttons */}
             <div style={card()}>
               <span style={lbl}>📤 Send to Crew</span>
@@ -4182,30 +4080,31 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
 // ADMIN SCREEN
 // ══════════════════════════════════════════════════════════════════════════════
 function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShift,setActiveShiftId}) {
-  // Admin is the crew + roster hub — the Roster tab works with or without a
-  // shift, so default there when nothing is selected.
-  const [tab,setTab]=useState(activeShift ? "overview" : "roster");
+  const [tab,setTab]=useState("overview");
   const [showGcalGuide, setShowGcalGuide] = useState(false);
 
+  if(!activeShift) return <NoShiftEmptyState title="Admin Panel" setScreen={setScreen}/>;
+
   function forceConfirm(cid) {
-    if(!activeShift) return;
     const crew=activeShift.crew.map(c=>c.id===cid?{...c,confirmed:true,confirmedAt:now()}:c);
     persist({...state,shifts:state.shifts.map(s=>s.id===activeShift.id?{...s,crew}:s)});
   }
   function toggleAbsent(cid) {
-    if(!activeShift) return;
     const crew=activeShift.crew.map(c=>c.id===cid?{...c,absent:!c.absent}:c);
     persist({...state,shifts:state.shifts.map(s=>s.id===activeShift.id?{...s,crew}:s)});
   }
+  function updateCrewEmail(cid,email) {
+    const crew=activeShift.crew.map(c=>c.id===cid?{...c,email}:c);
+    persist({...state,shifts:state.shifts.map(s=>s.id===activeShift.id?{...s,crew}:s)});
+  }
   function completeShift() {
-    if(!activeShift) return;
     persist({...state,shifts:state.shifts.map(s=>s.id===activeShift.id?{...s,status:"completed"}:s)});
   }
 
-  const conf=activeShift?activeShift.crew.filter(c=>c.confirmed).length:0;
-  const ci=activeShift?activeShift.crew.filter(c=>c.clockIn&&!c.clockOut).length:0;
-  const ab=activeShift?activeShift.crew.filter(c=>c.absent).length:0;
-  const totalH=activeShift?activeShift.crew.reduce((a,c)=>a+calcHours(c.clockIn,c.clockOut).total,0):0;
+  const conf=activeShift.crew.filter(c=>c.confirmed).length;
+  const ci=activeShift.crew.filter(c=>c.clockIn&&!c.clockOut).length;
+  const ab=activeShift.crew.filter(c=>c.absent).length;
+  const totalH=activeShift.crew.reduce((a,c)=>a+calcHours(c.clockIn,c.clockOut).total,0);
 
   return (
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
@@ -4216,7 +4115,7 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
             <Logo size={32}/>
             <div>
               <div style={{fontFamily:C.head,fontSize:"18px",letterSpacing:"0.08em",color:C.gold,lineHeight:1}}>ADMIN PANEL</div>
-              <div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.14em"}}>{activeShift ? `${activeShift.client} · ${activeShift.date}` : "CREW & ROSTER"}</div>
+              <div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.14em"}}>{activeShift.client} · {activeShift.date}</div>
             </div>
           </div>
           <button onClick={()=>setScreen("home")} style={{...btn("ghost"),padding:"6px 10px",fontSize:"10px",border:`1px solid ${C.border}`}}>← HOME</button>
@@ -4224,16 +4123,15 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
       </div>
 
       <div style={{display:"flex",gap:"3px",padding:"8px 12px",background:C.s1,borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
-        {["roster","overview","crew"].map(t=>(
+        {["overview","crew","shifts","roster"].map(t=>(
           <button key={t} onClick={()=>setTab(t)} style={{...tabBtn(tab===t),flex:"none",padding:"7px 10px",fontSize:"9px",whiteSpace:"nowrap"}}>
-            {t==="roster"?"📋 Roster":t==="overview"?"📊 Crew Status":"👥 Shift Crew"}
+            {t==="overview"?"📊 Overview":t==="crew"?"👥 Crew":t==="shifts"?"📅 Shifts":"📋 Roster"}
           </button>
         ))}
       </div>
 
       <div className="bcn-body" style={{paddingBottom:"80px"}}>
-        {tab==="overview"&&!activeShift&&<ShiftNeededNotice setScreen={setScreen}/>}
-        {tab==="overview"&&activeShift&&(
+        {tab==="overview"&&(
           <div style={{animation:"fadeUp 0.3s ease"}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"14px"}}>
               {[
@@ -4296,7 +4194,8 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
           </div>
         )}
 
-        {tab==="crew"&&(activeShift ? <AdminCrewEditTab state={state} persist={persist} activeShift={activeShift}/> : <ShiftNeededNotice setScreen={setScreen}/>)}
+        {tab==="crew"&&<AdminCrewEditTab state={state} persist={persist} activeShift={activeShift}/>}
+        {tab==="shifts"&&<AdminShiftsTab state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} setActiveShiftId={setActiveShiftId} activeShift={activeShift} currentUser={currentUser}/>}
         {tab==="roster"&&<AdminRosterTab state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>}
       </div>
 
@@ -4629,28 +4528,8 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
   }
   function deleteMember(id){
     if(!confirm("Permanently delete this crew member from the roster?")) return;
-    const member = state.roster.find(r=>r.id===id);
-    // If this person has a real account, tombstone {id,name} so the server-side
-    // merge won't re-add them on the next sync — and we can offer a restore.
-    let removedUserIds = state.removedUserIds||[];
-    if(member?.userId){
-      removedUserIds = [
-        ...removedUserIds.filter(x => (typeof x==="string"?x:x.id) !== member.userId),
-        {id: member.userId, name: member.name || "Crew member"},
-      ];
-    }
-    persist({...state, roster:state.roster.filter(r=>r.id!==id), removedUserIds});
+    persist({...state,roster:state.roster.filter(r=>r.id!==id)});
     setProfileId(null);
-  }
-  function restoreRemoved(item){
-    const userId = typeof item==="string" ? item : item.id;
-    const name = typeof item==="string" ? "Crew member" : (item.name || "Crew member");
-    const removedUserIds = (state.removedUserIds||[]).filter(x => (typeof x==="string"?x:x.id) !== userId);
-    // Optimistically re-add a minimal entry; the next sync fills email/phone.
-    const exists = state.roster.some(r => r.userId===userId || r.id===userId);
-    const roster = exists ? state.roster
-      : [...state.roster, {id:userId, userId, name, role:"Crew", position:"Crew", phone:"", email:"", available:true, active:true, notes:"", tags:[], source:"account"}];
-    persist({...state, roster, removedUserIds});
   }
 
   // Filter + sort
@@ -4689,27 +4568,6 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
           background:showArchived?C.s3:"transparent",color:showArchived?C.text:C.dim,border:`1px solid ${C.border}`,
         }}>{showArchived?"◉ Archived":"○ Show Archived"}</button>
       </div>
-
-      {/* Removed crew — restore */}
-      {(state.removedUserIds||[]).length > 0 && (
-        <div style={{...card({border:`1px solid ${C.border}`,marginBottom:"10px"})}}>
-          <span style={lbl}>🗑 Removed Crew ({(state.removedUserIds||[]).length})</span>
-          <div style={{fontSize:"10px",color:C.muted,marginTop:"2px",marginBottom:"8px"}}>
-            These accounts were removed from the roster. Restore to bring them back.
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
-            {(state.removedUserIds||[]).map((item,i)=>{
-              const name = typeof item==="string" ? "Crew member" : (item.name||"Crew member");
-              return (
-                <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:C.s2,borderRadius:"7px"}}>
-                  <span style={{fontSize:"12px",color:C.text}}>{name}</span>
-                  <button onClick={()=>restoreRemoved(item)} style={{...btn("ghost"),padding:"5px 10px",fontSize:"10px",border:`1px solid ${C.green}`,color:C.green}}>↩ RESTORE</button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Add form */}
       {adding && (
@@ -4903,17 +4761,8 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
       endTime: calParsed.endTime || f.endTime,
       location: calParsed.location || f.location,
       address: calParsed.address || f.address,
-      poc: calParsed.poc || f.poc,
-      pocPhone: calParsed.pocPhone || f.pocPhone,
-      uniform: calParsed.uniform || f.uniform,
       notes: calParsed.notes || f.notes,
     }));
-    if (calParsed.scope && calParsed.scope.length) {
-      setScopeLines(prev => {
-        const existing = prev.filter(l => l.trim());
-        return [...existing, ...calParsed.scope];
-      });
-    }
     setCalPaste("");
     setCalParsed(null);
     setShowCalPaste(false);
@@ -4984,7 +4833,7 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
 
       <div className="bcn-body" style={{display:"flex",flexDirection:"column",gap:"12px"}}>
         {/* GOOGLE CALENDAR PASTE IMPORTER */}
-        <div style={{...card({border:`1.5px dashed ${C.blue}`,background:C.blueBg})}}>
+        <div style={{...card({border:`1.5px dashed ${C.blue}`,background:"#0a1419"})}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}
             onClick={()=>setShowCalPaste(v=>!v)}>
             <div>
@@ -5013,10 +4862,6 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
                     {calParsed.endTime && <div><b style={{color:C.muted}}>End:</b> <span style={{color:C.text}}>{calParsed.endTime}</span></div>}
                     {calParsed.location && <div><b style={{color:C.muted}}>Location:</b> <span style={{color:C.text}}>{calParsed.location}</span></div>}
                     {calParsed.address && <div><b style={{color:C.muted}}>Address:</b> <span style={{color:C.text}}>{calParsed.address}</span></div>}
-                    {calParsed.poc && <div><b style={{color:C.muted}}>Contact:</b> <span style={{color:C.text}}>{calParsed.poc}{calParsed.pocPhone?` · ${calParsed.pocPhone}`:""}</span></div>}
-                    {!calParsed.poc && calParsed.pocPhone && <div><b style={{color:C.muted}}>Phone:</b> <span style={{color:C.text}}>{calParsed.pocPhone}</span></div>}
-                    {calParsed.uniform && <div><b style={{color:C.muted}}>Uniform:</b> <span style={{color:C.text}}>{calParsed.uniform}</span></div>}
-                    {calParsed.scope && calParsed.scope.length>0 && <div><b style={{color:C.muted}}>Scope:</b> <span style={{color:C.text}}>{calParsed.scope.join(" · ")}</span></div>}
                     {calParsed.notes && <div><b style={{color:C.muted}}>Notes:</b> <span style={{color:C.text}}>{calParsed.notes}</span></div>}
                   </div>
                   <button onClick={applyCalendarParse} style={{...btn("green",true),marginTop:"10px"}}>✓ APPLY TO FORM</button>
@@ -5038,16 +4883,16 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
             </div>
             <div>
               <span style={lbl}>Date *</span>
-              <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px"}}/>
+              <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px",colorScheme:"dark"}}/>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
               <div>
                 <span style={lbl}>Call Time *</span>
-                <TimeInput value={form.callTime} onChange={v=>setForm(f=>({...f,callTime:v}))}/>
+                <TimeInput value={form.callTime} onChange={v=>setForm(f=>({...f,callTime:v}))} placeholder="3:00 PM"/>
               </div>
               <div>
                 <span style={lbl}>End Time</span>
-                <TimeInput value={form.endTime} onChange={v=>setForm(f=>({...f,endTime:v}))}/>
+                <TimeInput value={form.endTime} onChange={v=>setForm(f=>({...f,endTime:v}))} placeholder="12:00 AM"/>
               </div>
             </div>
             <div>
@@ -5239,14 +5084,14 @@ function ScheduleScreen({state, persist, setScreen, currentUser, activeShift, se
             <button key={t.k} onClick={()=>setView(t.k)} style={{
               flex:1,padding:"9px 6px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.04em",
               background: view===t.k ? C.gold : "transparent",
-              color: view===t.k ? C.onaccent : C.muted,
+              color: view===t.k ? "#000" : C.muted,
               border:"none",borderRadius:"6px",cursor:"pointer",fontFamily:C.font,whiteSpace:"nowrap",
             }}>{t.label}</button>
           ))}
         </div>
       </div>
       {view==="calendar" && <CalendarScreen embedded state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>}
-      {view==="week" && <WeekGridScreen embedded state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>}
+      {view==="week" && <WeekGridScreen embedded state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>}
       {view==="avail" && <AvailabilityScreen embedded state={state} persist={persist} setScreen={setScreen} currentUser={currentUser}/>}
     </div>
   );
@@ -5456,7 +5301,7 @@ function ReportsScreen({state, setScreen, setActiveShiftId}) {
           {[{k:"week",l:"This Week"},{k:"month",l:"This Month"}].map(o=>(
             <button key={o.k} onClick={()=>setRange(o.k)} style={{
               flex:1,padding:"8px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.06em",
-              background: range===o.k ? C.gold : "transparent", color: range===o.k ? C.onaccent : C.muted,
+              background: range===o.k ? C.gold : "transparent", color: range===o.k ? "#000" : C.muted,
               border:`1px solid ${range===o.k?C.gold:C.border}`,borderRadius:"6px",cursor:"pointer",fontFamily:C.font,
             }}>{o.l}</button>
           ))}
@@ -5538,7 +5383,7 @@ function SectionTabs({current, tabs, setScreen}) {
           <button key={t.screen} onClick={()=>t.screen!==current && setScreen(t.screen)} style={{
             flex:1,padding:"8px 6px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.04em",
             background: t.screen===current ? C.gold : "transparent",
-            color: t.screen===current ? C.onaccent : C.muted,
+            color: t.screen===current ? "#000" : C.muted,
             border:"none",borderRadius:"6px",cursor:"pointer",fontFamily:C.font,whiteSpace:"nowrap",
           }}>{t.label}</button>
         ))}
@@ -5567,137 +5412,8 @@ function PageHeader({title,sub,onBack}) {
 const IRS_MILEAGE_RATE = 0.70; // 2025/2026 IRS standard mileage rate $/mile
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const CATS = ["General","Food & Meals","Transportation","Supplies","Equipment","Parking","Tolls","Other"];
-const CAT_COLORS = {
-  "General":"#6b7280", "Food & Meals":"#F97316", "Transportation":"#1f6fd6",
-  "Supplies":"#6d4fd0", "Equipment":"#0a8f5b", "Parking":"#d83a3a",
-  "Tolls":"#E8C84A", "Other":"#0ea5e9",
-};
-const catColor = (c) => CAT_COLORS[c] || "#6b7280";
 
 function fmtMoney(n) { return `$${parseFloat(n||0).toFixed(2)}`; }
-
-// Colored category picker — a block showing the current category that opens a
-// dropdown of color-coded options.
-function CategoryDropdown({value, onChange}) {
-  const [open, setOpen] = useState(false);
-  const color = catColor(value);
-  return (
-    <div style={{position:"relative"}}>
-      <button type="button" onClick={()=>setOpen(o=>!o)} style={{
-        display:"flex",alignItems:"center",gap:"8px",width:"100%",boxSizing:"border-box",
-        background:color+"22",border:`1.5px solid ${color}`,borderRadius:"8px",
-        padding:"10px 12px",cursor:"pointer",fontFamily:C.font,
-      }}>
-        <span style={{width:"13px",height:"13px",borderRadius:"3px",background:color,flexShrink:0}}/>
-        <span style={{flex:1,minWidth:0,textAlign:"left",fontSize:"13px",fontWeight:"700",color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{value}</span>
-        <span style={{color:C.muted,fontSize:"11px",flexShrink:0,transform:open?"rotate(180deg)":"none",transition:"transform 0.15s"}}>▼</span>
-      </button>
-      {open && (
-        <div style={{position:"absolute",top:"100%",right:0,marginTop:"4px",minWidth:"180px",background:C.s2,border:`1px solid ${C.borderHi}`,borderRadius:"8px",zIndex:200,overflow:"hidden",boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}>
-          {CATS.map(c=>{
-            const cc=catColor(c);
-            return (
-              <div key={c} onClick={()=>{onChange(c);setOpen(false);}} style={{
-                display:"flex",alignItems:"center",gap:"8px",padding:"10px 12px",cursor:"pointer",
-                background:c===value?cc+"22":"transparent",
-              }}
-                onMouseEnter={e=>e.currentTarget.style.background=cc+"22"}
-                onMouseLeave={e=>e.currentTarget.style.background=c===value?cc+"22":"transparent"}>
-                <span style={{width:"13px",height:"13px",borderRadius:"3px",background:cc,flexShrink:0}}/>
-                <span style={{fontSize:"13px",color:C.text,fontWeight:c===value?"700":"500"}}>{c}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Edit an existing expense entry (Monthly tab → Edit).
-function ExpenseEditModal({entry, onSave, onClose}) {
-  const [f, setF] = useState({
-    date: entry.date,
-    items: entry.items && entry.items.length ? entry.items.map(String) : [""],
-    paid: entry.paid ? String(entry.paid) : "",
-    mileage: entry.mileage ? String(entry.mileage) : "",
-    category: entry.category || "General",
-    notes: entry.notes || "",
-  });
-  const setItem=(i,v)=>setF(s=>{const items=[...s.items];items[i]=v;return{...s,items};});
-  const addItem=()=>setF(s=>({...s,items:[...s.items,""]}));
-  const removeItem=(i)=>setF(s=>({...s,items:s.items.filter((_,j)=>j!==i)}));
-  const total=f.items.reduce((a,x)=>a+parseFloat(x||0),0);
-
-  function save(){
-    const validItems=f.items.filter(x=>String(x).trim()&&!isNaN(parseFloat(x))).map(x=>parseFloat(x));
-    if(!f.date||validItems.length===0) return;
-    onSave({
-      date:f.date, items:validItems,
-      paid:f.paid?parseFloat(f.paid):0,
-      mileage:f.mileage?parseFloat(f.mileage):0,
-      category:f.category, notes:f.notes,
-    });
-  }
-
-  return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px",overflowY:"auto"}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:C.s1,border:`1.5px solid #F97316`,borderRadius:"12px",padding:"20px",maxWidth:"440px",width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
-        <div style={{fontFamily:C.head,fontSize:"22px",letterSpacing:"0.08em",color:"#F97316",marginBottom:"14px"}}>EDIT ENTRY</div>
-
-        <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
-          <div>
-            <span style={lbl}>Date *</span>
-            <input type="date" value={f.date} onChange={e=>setF(s=>({...s,date:e.target.value}))} style={{...inp,marginTop:"4px"}}/>
-          </div>
-
-          <div>
-            <span style={lbl}>Expense Amounts *</span>
-            <div style={{display:"flex",flexDirection:"column",gap:"6px",marginTop:"6px"}}>
-              {f.items.map((item,i)=>(
-                <div key={i} style={{display:"flex",gap:"6px",alignItems:"center"}}>
-                  <span style={{color:C.muted,fontSize:"13px",flexShrink:0}}>$</span>
-                  <input type="number" step="0.01" min="0" value={item} onChange={e=>setItem(i,e.target.value)} placeholder="0.00" style={{...inp,flex:1,textAlign:"right"}}/>
-                  {f.items.length>1&&<button onClick={()=>removeItem(i)} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:"6px",color:C.red,cursor:"pointer",fontSize:"13px",padding:"6px 10px",fontFamily:C.font}}>✕</button>}
-                </div>
-              ))}
-              {f.items.length>1&&<div style={{textAlign:"right",fontSize:"12px",color:"#F97316",fontWeight:"700"}}>= {fmtMoney(total)}</div>}
-              <button onClick={addItem} style={{...btn("ghost",true),border:`1px dashed ${C.border}`,padding:"8px",fontSize:"11px"}}>+ Add Receipt</button>
-            </div>
-          </div>
-
-          <div>
-            <span style={lbl}>Category</span>
-            <div style={{marginTop:"4px"}}><CategoryDropdown value={f.category} onChange={c=>setF(s=>({...s,category:c}))}/></div>
-          </div>
-
-          <div>
-            <span style={lbl}>Amount Paid to You</span>
-            <div style={{display:"flex",gap:"6px",alignItems:"center",marginTop:"4px"}}>
-              <span style={{color:C.muted,fontSize:"13px",flexShrink:0}}>$</span>
-              <input type="number" step="0.01" min="0" value={f.paid} onChange={e=>setF(s=>({...s,paid:e.target.value}))} placeholder="0.00" style={{...inp,textAlign:"right",border:`1px solid ${C.green}`,flex:1}}/>
-            </div>
-          </div>
-
-          <div>
-            <span style={lbl}>Mileage (optional)</span>
-            <input type="number" step="0.1" min="0" value={f.mileage} onChange={e=>setF(s=>({...s,mileage:e.target.value}))} placeholder="0" style={{...inp,marginTop:"4px",textAlign:"right"}}/>
-          </div>
-
-          <div>
-            <span style={lbl}>Notes (optional — paste anything)</span>
-            <textarea value={f.notes} onChange={e=>setF(s=>({...s,notes:e.target.value}))} placeholder="Paste or type notes…" style={{...inp,marginTop:"4px",minHeight:"60px",resize:"vertical"}}/>
-          </div>
-
-          <div style={{display:"flex",gap:"8px",marginTop:"4px"}}>
-            <button onClick={onClose} style={{...btn("ghost"),flex:1,border:`1px solid ${C.border}`}}>CANCEL</button>
-            <button onClick={save} disabled={!f.date||f.items.every(x=>!String(x).trim())} style={{...btn("gold"),flex:1.4,opacity:(!f.date||f.items.every(x=>!String(x).trim()))?0.4:1}}>SAVE CHANGES</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // Format one entry in the requested ledger style
 // e.g. "3/23 $22.28+$11.86=$34.14 [paid $171.00]"
@@ -5735,7 +5451,6 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
     notes: "",
   });
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(null); // entry being edited (Monthly tab)
 
   // Get entries for the viewed user
   const allEntries = (state.expenses||[]).filter(e=>e.userId===viewUserId);
@@ -5782,11 +5497,6 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
 
   function deleteEntry(id) {
     persist({...state, expenses:(state.expenses||[]).filter(e=>e.id!==id)});
-  }
-
-  function updateEntry(id, patch) {
-    persist({...state, expenses:(state.expenses||[]).map(e=>e.id===id?{...e,...patch}:e)});
-    setEditing(null);
   }
 
   // Monthly totals
@@ -5879,7 +5589,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
         {/* ── LOG TAB ── */}
         {tab==="log" && (
           <div style={{animation:"fadeUp 0.3s ease",display:"flex",flexDirection:"column",gap:"12px"}}>
-            <div style={{background:"rgba(249,115,22,0.10)",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px"}}>
+            <div style={{background:"#120c00",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px"}}>
               <div style={{fontSize:"11px",color:"#F97316",fontWeight:"700",letterSpacing:"0.1em",marginBottom:"4px"}}>💡 HOW IT WORKS</div>
               <div style={{fontSize:"11px",color:C.muted,lineHeight:"1.6"}}>Log your expenses for each shift day. Add individual receipt amounts — they'll be shown as an addition (e.g. $22.28+$11.86=$34.14). Enter your <b style={{color:C.text}}>paid</b> amount manually. Everything auto-formats for tax season.</div>
             </div>
@@ -5888,14 +5598,22 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
               <div style={{fontSize:"11px",color:"#F97316",fontWeight:"700",letterSpacing:"0.12em",marginBottom:"12px"}}>NEW ENTRY</div>
               <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
 
-                <div>
-                  <span style={lbl}>Date *</span>
-                  <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px"}}/>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
+                  <div>
+                    <span style={lbl}>Date *</span>
+                    <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px",colorScheme:"dark"}}/>
+                  </div>
+                  <div>
+                    <span style={lbl}>Category</span>
+                    <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))} style={{...inp,marginTop:"4px",appearance:"none"}}>
+                      {CATS.map(c=><option key={c}>{c}</option>)}
+                    </select>
+                  </div>
                 </div>
 
                 {/* Expense items */}
                 <div>
-                  <span style={lbl}>Expense Amount * — tax category on the right →</span>
+                  <span style={lbl}>Expense Amounts * (one per receipt)</span>
                   <div style={{display:"flex",flexDirection:"column",gap:"6px",marginTop:"6px"}}>
                     {form.items.map((item,i)=>(
                       <div key={i} style={{display:"flex",gap:"6px",alignItems:"center"}}>
@@ -5903,12 +5621,8 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                         <input type="number" step="0.01" min="0" value={item}
                           onChange={e=>setItem(i,e.target.value)} placeholder="0.00"
                           style={{...inp,flex:1,textAlign:"right"}}/>
-                        {i===0 ? (
-                          <div style={{flexShrink:0,width:"148px"}}>
-                            <CategoryDropdown value={form.category} onChange={c=>setForm(f=>({...f,category:c}))}/>
-                          </div>
-                        ) : (
-                          <button onClick={()=>removeItem(i)} style={{background:"none",border:`1px solid ${C.redBg}`,borderRadius:"6px",color:C.red,cursor:"pointer",fontSize:"13px",padding:"6px 10px",fontFamily:C.font,flexShrink:0}}>✕</button>
+                        {form.items.length>1&&(
+                          <button onClick={()=>removeItem(i)} style={{background:"none",border:`1px solid ${C.redBg}`,borderRadius:"6px",color:C.red,cursor:"pointer",fontSize:"13px",padding:"6px 10px",fontFamily:C.font}}>✕</button>
                         )}
                       </div>
                     ))}
@@ -5948,12 +5662,10 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                   <div style={{fontSize:"9px",color:C.dim,marginTop:"4px"}}>IRS rate ${IRS_MILEAGE_RATE}/mile · deductible for 1099 contractors</div>
                 </div>
 
-                {/* Notes — paste block */}
+                {/* Notes */}
                 <div>
-                  <span style={lbl}>Notes (optional — paste anything)</span>
-                  <textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))}
-                    placeholder="Paste or type — receipts, vendor, job name, anything. Line breaks are kept."
-                    style={{...inp,marginTop:"4px",minHeight:"70px",resize:"vertical"}}/>
+                  <span style={lbl}>Notes (optional)</span>
+                  <input value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="e.g. Spring Studios job" style={{...inp,marginTop:"4px"}}/>
                 </div>
 
                 <button onClick={saveEntry}
@@ -5984,7 +5696,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
             ) : (
               <>
                 {/* Ledger display – exact requested format */}
-                <div style={{...card({background:C.s2,border:`1px solid ${C.border}`,marginBottom:"12px",padding:"16px"})}}>
+                <div style={{...card({background:"#0a0a00",border:`1px solid #2a2000`,marginBottom:"12px",padding:"16px"})}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
                     <div style={{fontFamily:C.head,fontSize:"16px",letterSpacing:"0.08em",color:"#F97316"}}>{MONTHS[viewMonth].toUpperCase()}</div>
                     <button onClick={()=>copy(buildMonthCopyText())} style={{...btn("ghost"),padding:"5px 10px",fontSize:"10px",border:`1px solid ${C.border}`,color:copied?C.green:C.muted}}>
@@ -6041,7 +5753,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                           <div style={{flex:1}}>
                             <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
                               <span style={{fontSize:"13px",fontWeight:"700",color:"#F97316"}}>{new Date(e.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>
-                              <span style={badge(catColor(e.category), catColor(e.category)+"22")}>{e.category}</span>
+                              <span style={badge("#F97316","#1a0c00")}>{e.category}</span>
                             </div>
                             {/* Items breakdown */}
                             <div style={{fontFamily:"'Courier New',monospace",fontSize:"12px",color:C.text,marginBottom:"4px"}}>
@@ -6060,11 +5772,6 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                             <div style={{fontSize:"14px",fontWeight:"700",color:parseFloat(e.paid)-total>=0?C.green:C.red}}>{fmtMoney(parseFloat(e.paid)-total)}</div>
                             <div style={{fontSize:"9px",color:C.muted}}>net</div>
                           </div>
-                        </div>
-                        {/* Per-entry actions */}
-                        <div style={{marginTop:"10px",display:"flex",gap:"6px"}}>
-                          <button onClick={()=>setEditing(e)} style={{...btn("ghost"),flex:1,padding:"7px",fontSize:"10px",border:`1px solid ${C.gold}`,color:C.gold}}>✎ EDIT</button>
-                          <button onClick={()=>deleteEntry(e.id)} style={{...btn("ghost"),flex:1,padding:"7px",fontSize:"10px",border:`1px solid ${C.border}`,color:C.muted}}>🗑 DELETE</button>
                         </div>
                       </div>
                     );
@@ -6086,7 +5793,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
             </div>
 
             {/* 1099 disclaimer */}
-            <div style={{background:"rgba(249,115,22,0.10)",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px",marginBottom:"14px"}}>
+            <div style={{background:"#120c00",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px",marginBottom:"14px"}}>
               <div style={{fontSize:"10px",color:"#F97316",fontWeight:"700",letterSpacing:"0.12em",marginBottom:"4px"}}>1099-NEC · NEW YORK, NY · SINGLE FILER</div>
               <div style={{fontSize:"11px",color:C.muted,lineHeight:"1.6"}}>
                 Estimate covers Federal + NY State + NYC + Self-Employment tax based on <b style={{color:C.text}}>2024 brackets</b>. Brackets change yearly — verify with a CPA before filing. Married/HoH or non-resident filers will see different numbers.
@@ -6155,7 +5862,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                   </div>
 
                   {/* Bottom line */}
-                  <div style={{background:"rgba(249,115,22,0.10)",borderRadius:"8px",padding:"12px",marginTop:"10px"}}>
+                  <div style={{background:"#120c00",borderRadius:"8px",padding:"12px",marginTop:"10px"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}}>
                       <span style={{fontSize:"12px",color:C.text,fontWeight:"700"}}>TOTAL ESTIMATED TAX</span>
                       <span style={{fontSize:"18px",color:"#F97316",fontWeight:"700"}}>{fmtMoney(tax.totalTax)}</span>
@@ -6256,14 +5963,6 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
           </div>
         )}
       </div>
-
-      {editing && (
-        <ExpenseEditModal
-          entry={editing}
-          onSave={(patch)=>updateEntry(editing.id, patch)}
-          onClose={()=>setEditing(null)}
-        />
-      )}
     </div>
   );
 }
@@ -6345,7 +6044,7 @@ function TaxSavingsCalc({gross, taxable}) {
         </div>
       </div>
 
-      <div style={{background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"6px",padding:"10px"}}>
+      <div style={{background:"#1a1400",border:`1px solid ${C.goldDim}`,borderRadius:"6px",padding:"10px"}}>
         <div style={{fontSize:"10px",color:C.gold,fontWeight:"700",marginBottom:"4px",letterSpacing:"0.08em"}}>⚠️ NOT TAX ADVICE</div>
         <div style={{fontSize:"10px",color:C.muted,lineHeight:"1.5"}}>
           A rough guide only. Your actual rate depends on federal bracket, NY state tax, deductions, and other income. <b style={{color:C.text}}>Verify with a CPA.</b> Self-employment tax rate (~15.3% combined Social Security + Medicare) is what I believe is current — please confirm at irs.gov.
@@ -6389,7 +6088,7 @@ function GoogleCalSetupGuide({onClose}) {
           </div>
         </div>
 
-        <div style={{background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"8px",padding:"12px"}}>
+        <div style={{background:"#1a1400",border:`1px solid ${C.goldDim}`,borderRadius:"8px",padding:"12px"}}>
           <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",marginBottom:"4px",letterSpacing:"0.08em"}}>💡 RECOMMENDATION</div>
           <div style={{fontSize:"11px",color:C.text,lineHeight:"1.6"}}>For your pitch, the "Add to Calendar" button is more than enough — it's instant and looks polished. Add full OAuth sync once BigCrew commits to deploying. That keeps complexity out of the demo phase.</div>
         </div>
