@@ -1326,7 +1326,7 @@ function DailyTimeline({shifts, currentUserRosterId}) {
               borderRadius:"3px",
               padding:"2px 4px",
               fontSize:"9px",
-              color: isActive ? "#000" : C.gold,
+              color: isActive ? C.onaccent : C.gold,
               fontWeight:"700",
               overflow:"hidden",
               whiteSpace:"nowrap",
@@ -3508,7 +3508,7 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded}) {
   }
 
   // Client → color
-  const palette = ["#E8C84A", C.green, C.blue, C.purple, "#F97316", "#EC4899", "#06B6D4"];
+  const palette = ["#E8C84A", "#4ade80", "#60a5fa", "#c084fc", "#fb923c", "#f472b6", "#22d3ee"];
   const clientColor = (client) => {
     let h = 0;
     for(let i=0;i<client.length;i++) h = (h*31 + client.charCodeAt(i)) >>> 0;
