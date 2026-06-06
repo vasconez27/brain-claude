@@ -116,6 +116,12 @@ function fmtHours(h) {
   return `${hrs}h ${mins}m`;
 }
 
+function shiftScheduledHours(shift) {
+  const start = parseShiftStart(shift.date, shift.callTime);
+  const end = start ? getShiftEnd(start, shift.endTime) : null;
+  return (start && end) ? Math.round(((end - start) / 3600000) * 100) / 100 : null;
+}
+
 // ─── ACTIVE TIMELINE HELPERS ─────────────────────────────────────────────────
 // Returns 0-1 representing where 'now' falls in the shift's window
 function shiftProgress(shift, now = new Date()) {
@@ -1898,7 +1904,7 @@ function ManagerOpsOverview({state, setScreen, setActiveShiftId}) {
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"8px"}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:"14px",fontWeight:"700",color:C.text}}>{s.client}</div>
-                  <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>{s.date} · {s.callTime}–{s.endTime||"?"} · {s.location}</div>
+                  <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>{s.date} · {s.callTime}–{s.endTime||"?"}{shiftScheduledHours(s)!=null?` · ${shiftScheduledHours(s)}h`:""} · {s.location}</div>
                 </div>
                 <span style={{color:C.dim,fontSize:"16px"}}>›</span>
               </div>
@@ -2035,7 +2041,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
               <div>
                 <span style={lbl}>Your Next Shift</span>
                 <div style={{fontFamily:C.head,fontSize:"26px",letterSpacing:"0.06em",color:C.gold,lineHeight:1}}>{activeShift.client}</div>
-                <div style={{fontSize:"11px",color:C.muted,marginTop:"4px"}}>{activeShift.date} · {activeShift.callTime}–{activeShift.endTime}</div>
+                <div style={{fontSize:"11px",color:C.muted,marginTop:"4px"}}>{activeShift.date} · {activeShift.callTime}–{activeShift.endTime}{shiftScheduledHours(activeShift)!=null?` · ${shiftScheduledHours(activeShift)}h`:""}</div>
               </div>
               <div style={{textAlign:"right"}}>
                 <div style={{fontSize:"28px",fontWeight:"700",color:confirmed===total&&total>0?C.green:C.gold}}>{confirmed}/{total}</div>
@@ -2153,9 +2159,9 @@ function CCHoursTab({shift, updateShift, currentUser}) {
     return (
       <div style={{textAlign:"center",padding:"36px 20px"}}>
         <div style={{fontSize:"36px",marginBottom:"8px"}}>✅</div>
-        <div style={{fontSize:"14px",fontWeight:"700",color:C.green,marginBottom:"4px"}}>Hours Submitted</div>
+        <div style={{fontSize:"14px",fontWeight:"700",color:C.green,marginBottom:"4px"}}>Hours Confirmed</div>
         <div style={{fontSize:"11px",color:C.muted}}>By {shift.ccSubmittedBy} · {shift.ccSubmittedAt?fmt(shift.ccSubmittedAt):""}</div>
-        <div style={{fontSize:"10px",color:C.dim,marginTop:"8px"}}>Manager can still adjust individual entries if needed.</div>
+        <div style={{fontSize:"10px",color:C.dim,marginTop:"8px"}}>Manager can still adjust individual entries if needed. Hours were applied when each crew member confirmed.</div>
       </div>
     );
   }
@@ -2163,10 +2169,8 @@ function CCHoursTab({shift, updateShift, currentUser}) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
       <div style={card()}>
-        <span style={lbl}>Scheduled window</span>
-        <div style={{fontSize:"12px",color:C.text,fontWeight:"700",marginBottom:"14px"}}>
-          {shift.callTime} – {shift.endTime} &nbsp;·&nbsp; {scheduledHours}h scheduled
-        </div>
+        <span style={lbl}>Review crew hours · {shift.callTime} – {shift.endTime} · {scheduledHours}h scheduled</span>
+        <div style={{fontSize:"11px",color:C.muted,marginBottom:"14px"}}>Hours were applied when each crew member confirmed. Adjust anyone who worked different.</div>
         <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
           {shift.crew.filter(c => !c.declined).map(c => (
             <div key={c.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",
@@ -2187,7 +2191,7 @@ function CCHoursTab({shift, updateShift, currentUser}) {
         </div>
       </div>
       <button onClick={submitHours} style={{...btn("green",true),padding:"14px",fontSize:"12px",letterSpacing:"0.1em"}}>
-        ✓ SUBMIT CREW HOURS
+        ✓ CONFIRM HOURS
       </button>
     </div>
   );
@@ -2203,10 +2207,12 @@ function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activ
   if(!activeShift) return <div style={{...{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontFamily:C.font}}}>No active shift</div>;
 
   function confirm() {
+    const scheduledHours = shiftScheduledHours(activeShift);
     updateShift(activeShift.id, s => ({
       ...s,
       crew: s.crew.map(c => (c.rosterId===currentUser.id||c.id===currentUser.id)
-        ? {...c, confirmed:true, confirmedAt:now(), declined:false, declinedAt:null} : c),
+        ? {...c, confirmed:true, confirmedAt:now(), declined:false, declinedAt:null,
+           ...(scheduledHours != null && !c.manualHours ? {manualHours: scheduledHours} : {})} : c),
     }), currentUser.name);
   }
   function decline() {
@@ -2362,7 +2368,7 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state,persist}) {
       {/* Details */}
       {[
         {label:"Date",value:shift.date,icon:"📅"},
-        {label:"Call Time",value:`${shift.callTime} – ${shift.endTime}`,icon:"⏰"},
+        {label:"Call Time",value:`${shift.callTime} – ${shift.endTime}${shiftScheduledHours(shift)!=null?` · ${shiftScheduledHours(shift)}h`:""}`,icon:"⏰"},
         {label:"Client",value:shift.client,icon:"🏢"},
         {label:"Point of Contact",value:shift.poc+(shift.pocPhone?` · ${shift.pocPhone}`:""),icon:"📞"},
       ].map(row=>(
@@ -2880,14 +2886,11 @@ function HoursScreen({state,persist,updateShift,setScreen,currentUser,activeShif
   const [adjustingMember, setAdjustingMember] = useState(null);
   const [adjustingShift, setAdjustingShift] = useState(null);
 
-  // All shifts this crew member is on (whether clocked in or not)
   function getMyEntries() {
     return state.shifts.flatMap(s =>
-      s.crew.filter(c => c.rosterId===currentUser.id || c.id===currentUser.id).map(c => ({
-        shift: s,
-        crew: c,
-        hours: calcHours(c.clockIn, c.clockOut, c.manualHours),
-      }))
+      s.crew
+        .filter(c => (c.rosterId===currentUser.id || c.id===currentUser.id) && c.confirmed && !c.declined)
+        .map(c => ({shift: s, crew: c, hours: calcHours(c.clockIn, c.clockOut, c.manualHours)}))
     );
   }
 
@@ -4417,7 +4420,7 @@ function AdminShiftsTab({state,persist,updateShift,setScreen,setActiveShiftId,ac
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"8px"}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:"14px",fontWeight:"700",color:isActive?C.gold:C.text}}>{s.client}{isActive?" ·  ACTIVE":""}</div>
-                  <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>{s.date} · {s.callTime}–{s.endTime||"?"} · {s.location}</div>
+                  <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>{s.date} · {s.callTime}–{s.endTime||"?"}{shiftScheduledHours(s)!=null?` · ${shiftScheduledHours(s)}h`:""} · {s.location}</div>
                 </div>
                 <LastUpdatedBadge timestamp={s.lastUpdated} by={s.updatedBy} prominent/>
               </div>
@@ -5178,7 +5181,7 @@ function SearchScreen({state, setScreen, setActiveShiftId}) {
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}}>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:"13px",fontWeight:"700"}}>{s.client}</div>
-                      <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>{s.date} · {s.callTime}–{s.endTime||"?"} · {s.location}</div>
+                      <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>{s.date} · {s.callTime}–{s.endTime||"?"}{shiftScheduledHours(s)!=null?` · ${shiftScheduledHours(s)}h`:""} · {s.location}</div>
                     </div>
                     <span style={{color:C.dim}}>›</span>
                   </div>
