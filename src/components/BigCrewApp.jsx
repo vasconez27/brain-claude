@@ -1408,7 +1408,7 @@ function DailyTimeline({shifts, currentUserRosterId}) {
               borderRadius:"3px",
               padding:"2px 4px",
               fontSize:"9px",
-              color: isActive ? "#000" : C.gold,
+              color: isActive ? C.onaccent : C.gold,
               fontWeight:"700",
               overflow:"hidden",
               whiteSpace:"nowrap",
@@ -2684,7 +2684,7 @@ function UpdatesTab({shift,state,persist,isManager}) {
               <button key={o.key} onClick={()=>setDuration(o.key)} style={{
                 padding:"5px 10px",fontSize:"10px",fontWeight:"700",letterSpacing:"0.08em",
                 background: duration===o.key ? C.gold : "transparent",
-                color: duration===o.key ? "#000" : C.gold,
+                color: duration===o.key ? C.onaccent : C.gold,
                 border:`1px solid ${C.gold}`,borderRadius:"5px",cursor:"pointer",fontFamily:C.font,
               }}>{o.label}</button>
             ))}
@@ -2709,7 +2709,7 @@ function UpdatesTab({shift,state,persist,isManager}) {
                     <button key={o.key} onClick={()=>setEditDuration(o.key)} style={{
                       padding:"4px 8px",fontSize:"9px",
                       background: editDuration===o.key ? C.gold : "transparent",
-                      color: editDuration===o.key ? "#000" : C.gold,
+                      color: editDuration===o.key ? C.onaccent : C.gold,
                       border:`1px solid ${C.gold}`,borderRadius:"4px",cursor:"pointer",fontFamily:C.font,
                     }}>{o.label}</button>
                   ))}
@@ -3292,7 +3292,7 @@ function AvailabilityScreen({state,persist,setScreen,currentUser,embedded}) {
                 <button key={v.key} onClick={()=>setManagerView(v.key)} style={{
                   flex:1,padding:"8px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.08em",
                   background: managerView===v.key ? C.gold : "transparent",
-                  color: managerView===v.key ? "#000" : C.muted,
+                  color: managerView===v.key ? C.onaccent : C.muted,
                   border: `1px solid ${managerView===v.key ? C.gold : C.border}`,
                   borderRadius:"6px",cursor:"pointer",fontFamily:C.font,
                 }}>{v.label}</button>
@@ -3498,7 +3498,7 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUs
   }
 
   // Client → color
-  const palette = [C.gold, C.green, C.blue, C.purple, "#F97316", "#EC4899", "#06B6D4"];
+  const palette = ["#E8C84A", C.green, C.blue, C.purple, "#F97316", "#EC4899", "#06B6D4"];
   const clientColor = (client) => {
     let h = 0;
     for(let i=0;i<client.length;i++) h = (h*31 + client.charCodeAt(i)) >>> 0;
@@ -3871,7 +3871,7 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
           {[{k:"blast",l:"📋 Shift Blast"},{k:"custom",l:"✏️ Custom Note"}].map(o=>(
             <button key={o.k} onClick={()=>setMsgMode(o.k)} style={{
               flex:1,padding:"9px 6px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.04em",
-              background: msgMode===o.k ? C.gold : "transparent", color: msgMode===o.k ? "#000" : C.muted,
+              background: msgMode===o.k ? C.gold : "transparent", color: msgMode===o.k ? C.onaccent : C.muted,
               border:"none",borderRadius:"6px",cursor:"pointer",fontFamily:C.font,
             }}>{o.l}</button>
           ))}
@@ -5163,7 +5163,7 @@ function ScheduleScreen({state, persist, setScreen, currentUser, activeShift, se
             <button key={t.k} onClick={()=>setView(t.k)} style={{
               flex:1,padding:"9px 6px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.04em",
               background: view===t.k ? C.gold : "transparent",
-              color: view===t.k ? "#000" : C.muted,
+              color: view===t.k ? C.onaccent : C.muted,
               border:"none",borderRadius:"6px",cursor:"pointer",fontFamily:C.font,whiteSpace:"nowrap",
             }}>{t.label}</button>
           ))}
@@ -5380,7 +5380,7 @@ function ReportsScreen({state, setScreen, setActiveShiftId}) {
           {[{k:"week",l:"This Week"},{k:"month",l:"This Month"}].map(o=>(
             <button key={o.k} onClick={()=>setRange(o.k)} style={{
               flex:1,padding:"8px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.06em",
-              background: range===o.k ? C.gold : "transparent", color: range===o.k ? "#000" : C.muted,
+              background: range===o.k ? C.gold : "transparent", color: range===o.k ? C.onaccent : C.muted,
               border:`1px solid ${range===o.k?C.gold:C.border}`,borderRadius:"6px",cursor:"pointer",fontFamily:C.font,
             }}>{o.l}</button>
           ))}
@@ -5462,7 +5462,7 @@ function SectionTabs({current, tabs, setScreen}) {
           <button key={t.screen} onClick={()=>t.screen!==current && setScreen(t.screen)} style={{
             flex:1,padding:"8px 6px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.04em",
             background: t.screen===current ? C.gold : "transparent",
-            color: t.screen===current ? "#000" : C.muted,
+            color: t.screen===current ? C.onaccent : C.muted,
             border:"none",borderRadius:"6px",cursor:"pointer",fontFamily:C.font,whiteSpace:"nowrap",
           }}>{t.label}</button>
         ))}
