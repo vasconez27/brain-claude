@@ -1989,8 +1989,20 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
   const total = activeShift?.crew.length||0;
   const myCrewEntry = activeShift?.crew.find(c=>c.rosterId===currentUser.id||c.id===currentUser.id);
 
-  // Unread notifications
-  const myNotifs = state.notifications.filter(n=>n.to===currentUser.id||n.to==="all").slice(0,3);
+  // Per-device dismissed notification tracking
+  const [dismissed, setDismissed] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("bigcrew_dismissed_notifs")||"[]")); }
+    catch { return new Set(); }
+  });
+  function handleDismiss(id) {
+    const next = new Set([...dismissed, id]);
+    setDismissed(next);
+    try { localStorage.setItem("bigcrew_dismissed_notifs", JSON.stringify([...next])); } catch {}
+  }
+
+  const myNotifs = state.notifications
+    .filter(n => (n.to===currentUser.id||n.to==="all") && !dismissed.has(n.id))
+    .slice(0, 3);
 
   return (
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
@@ -2023,6 +2035,8 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
                   <div style={{fontSize:"12px",color:C.text,lineHeight:"1.4"}}>{n.text}</div>
                   <div style={{fontSize:"9px",color:C.dim,marginTop:"4px"}}>{fmt(n.ts)}</div>
                 </div>
+                <button onClick={()=>handleDismiss(n.id)} aria-label="Dismiss"
+                  style={{background:"none",border:"none",color:C.dim,cursor:"pointer",fontSize:"15px",lineHeight:1,padding:"2px 4px",flexShrink:0}}>✕</button>
               </div>
             ))}
           </div>
