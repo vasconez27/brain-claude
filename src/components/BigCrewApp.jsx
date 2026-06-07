@@ -62,6 +62,7 @@ function applyTheme(name) {
   const root = document.documentElement;
   Object.entries(t).forEach(([k, v]) => root.style.setProperty("--bc-" + k, v));
   root.dataset.bcTheme = name;
+  root.style.colorScheme = name; // native controls (date pickers, scrollbars) follow theme
 }
 
 const uid = () => Math.random().toString(36).slice(2,9);
@@ -140,7 +141,7 @@ function shiftProgress(shift, now = new Date()) {
 //   → Completed → Paid → Archived
 const STATUS_ORDER = ["draft","open","assigned","awaiting","confirmed","in_progress","completed","paid","archived"];
 const STATUS_META = {
-  draft:       {label:"Draft",             short:"DRAFT",      color:"#71717a", bg:"#1c1c1f"},
+  draft:       {label:"Draft",             short:"DRAFT",      color:"#71717a", bg:"rgba(113,113,122,0.15)"},
   open:        {label:"Open",              short:"OPEN",       color:"#4D9FFF", bg:"rgba(77,159,255,0.12)"},
   assigned:    {label:"Crew Assigned",     short:"ASSIGNED",   color:"#A78BFA", bg:"rgba(167,139,250,0.12)"},
   awaiting:    {label:"Awaiting Confirm",  short:"AWAITING",   color:"#E8C84A", bg:"rgba(232,200,74,0.12)"},
@@ -148,7 +149,7 @@ const STATUS_META = {
   in_progress: {label:"In Progress",       short:"LIVE",       color:"#E8C84A", bg:"rgba(232,200,74,0.18)"},
   completed:   {label:"Completed",         short:"DONE",       color:"#3ECF8E", bg:"rgba(62,207,142,0.10)"},
   paid:        {label:"Paid",              short:"PAID",       color:"#22c55e", bg:"rgba(34,197,94,0.14)"},
-  archived:    {label:"Archived",          short:"ARCHIVED",   color:"#52525b", bg:"#161618"},
+  archived:    {label:"Archived",          short:"ARCHIVED",   color:"#52525b", bg:"rgba(82,82,91,0.15)"},
 };
 
 // Auto-derive a shift's pipeline status from its data + the clock.
@@ -1044,7 +1045,7 @@ function TimeInput({value, onChange, placeholder="3:00 PM"}) {
         type="time"
         value={to24Hour(value)}
         onChange={e=>onChange(from24Hour(e.target.value))}
-        style={{...inp,flex:1,colorScheme:"dark"}}
+        style={{...inp,flex:1}}
       />
       <div style={{fontSize:"11px",color:C.muted,minWidth:"60px",textAlign:"right",fontWeight:"600"}}>
         {value || placeholder}
@@ -1877,7 +1878,7 @@ function ManagerOpsOverview({state, setScreen, setActiveShiftId}) {
 
       {/* Alerts */}
       {(openPositions>0 || declinedCount>0) && (
-        <div style={{...card({background:"#1a1400",border:`1px solid ${C.goldDim}`,marginBottom:"10px"})}}>
+        <div style={{...card({background:C.goldBg,border:`1px solid ${C.goldDim}`,marginBottom:"10px"})}}>
           <div style={{fontSize:"10px",color:C.gold,fontWeight:"700",letterSpacing:"0.08em",marginBottom:"4px"}}>⚠️ NEEDS ATTENTION</div>
           <div style={{fontSize:"11px",color:C.text,lineHeight:"1.5"}}>
             {openPositions>0 && <div>· {openPositions} open position{openPositions>1?"s":""} still unfilled</div>}
@@ -2375,7 +2376,7 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state,persist}) {
         </div>
       )}
       {/* Notes */}
-      <div style={{background:"#1a1400",border:`1px solid ${C.goldDim}`,borderRadius:"10px",padding:"12px",display:"flex",gap:"10px"}}>
+      <div style={{background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"10px",padding:"12px",display:"flex",gap:"10px"}}>
         <span style={{fontSize:"18px"}}>⚠️</span>
         <div style={{fontSize:"12px",color:"#d4cfbf",lineHeight:"1.6"}}>{shift.notes}</div>
       </div>
@@ -2415,7 +2416,7 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state,persist}) {
         ))}
       </div>
       {/* Uniform */}
-      <div style={{...card({background:"#0e0e14",border:`1px solid #2a2a3a`})}} >
+      <div style={{...card({background:C.s2,border:`1px solid ${C.border}`})}} >
         <span style={lbl}>👕 Uniform</span>
         <div style={{fontSize:"12px",color:"#c8c4d4",lineHeight:"1.6"}}>{shift.uniform}</div>
       </div>
@@ -3274,7 +3275,7 @@ function AvailabilityScreen({state,persist,setScreen,currentUser,embedded}) {
                   <div style={{display:"flex",flexDirection:"column",gap:"8px",marginTop:"8px"}}>
                     <div>
                       <div style={{fontSize:"9px",color:C.dim,marginBottom:"3px"}}>DATE</div>
-                      <input type="date" value={rangeDate} onChange={e=>setRangeDate(e.target.value)} style={{...inp,colorScheme:"dark"}}/>
+                      <input type="date" value={rangeDate} onChange={e=>setRangeDate(e.target.value)} style={{...inp}}/>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
                       <div>
@@ -4003,7 +4004,7 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
                 <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",letterSpacing:"0.12em"}}>📨 LIVE PREVIEW</div>
                 <div style={{fontSize:"9px",color:C.muted}}>{messageText.length} chars</div>
               </div>
-              <div style={{background:"#0a0a00",borderRadius:"7px",padding:"14px",fontSize:"12px",lineHeight:"1.8",color:C.text,whiteSpace:"pre-wrap",fontFamily:"'Courier New',monospace",maxHeight:"480px",overflowY:"auto",border:`1px solid ${C.border}`}}>
+              <div style={{background:C.s2,borderRadius:"7px",padding:"14px",fontSize:"12px",lineHeight:"1.8",color:C.text,whiteSpace:"pre-wrap",fontFamily:"'Courier New',monospace",maxHeight:"480px",overflowY:"auto",border:`1px solid ${C.border}`}}>
                 {messageText}
               </div>
             </div>
@@ -4850,7 +4851,7 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
 
       <div className="bcn-body" style={{display:"flex",flexDirection:"column",gap:"12px"}}>
         {/* GOOGLE CALENDAR PASTE IMPORTER */}
-        <div style={{...card({border:`1.5px dashed ${C.blue}`,background:"#0a1419"})}}>
+        <div style={{...card({border:`1.5px dashed ${C.blue}`,background:C.blueBg})}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}
             onClick={()=>setShowCalPaste(v=>!v)}>
             <div>
@@ -4900,7 +4901,7 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
             </div>
             <div>
               <span style={lbl}>Date *</span>
-              <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px",colorScheme:"dark"}}/>
+              <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px"}}/>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
               <div>
@@ -5606,7 +5607,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
         {/* ── LOG TAB ── */}
         {tab==="log" && (
           <div style={{animation:"fadeUp 0.3s ease",display:"flex",flexDirection:"column",gap:"12px"}}>
-            <div style={{background:"#120c00",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px"}}>
+            <div style={{background:"rgba(249,115,22,0.1)",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px"}}>
               <div style={{fontSize:"11px",color:"#F97316",fontWeight:"700",letterSpacing:"0.1em",marginBottom:"4px"}}>💡 HOW IT WORKS</div>
               <div style={{fontSize:"11px",color:C.muted,lineHeight:"1.6"}}>Log your expenses for each shift day. Add individual receipt amounts — they'll be shown as an addition (e.g. $22.28+$11.86=$34.14). Enter your <b style={{color:C.text}}>paid</b> amount manually. Everything auto-formats for tax season.</div>
             </div>
@@ -5618,7 +5619,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
                   <div>
                     <span style={lbl}>Date *</span>
-                    <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px",colorScheme:"dark"}}/>
+                    <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...inp,marginTop:"4px"}}/>
                   </div>
                   <div>
                     <span style={lbl}>Category</span>
@@ -5713,7 +5714,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
             ) : (
               <>
                 {/* Ledger display – exact requested format */}
-                <div style={{...card({background:"#0a0a00",border:`1px solid #2a2000`,marginBottom:"12px",padding:"16px"})}}>
+                <div style={{...card({background:C.s2,border:`1px solid ${C.border}`,marginBottom:"12px",padding:"16px"})}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
                     <div style={{fontFamily:C.head,fontSize:"16px",letterSpacing:"0.08em",color:"#F97316"}}>{MONTHS[viewMonth].toUpperCase()}</div>
                     <button onClick={()=>copy(buildMonthCopyText())} style={{...btn("ghost"),padding:"5px 10px",fontSize:"10px",border:`1px solid ${C.border}`,color:copied?C.green:C.muted}}>
@@ -5770,7 +5771,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                           <div style={{flex:1}}>
                             <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
                               <span style={{fontSize:"13px",fontWeight:"700",color:"#F97316"}}>{new Date(e.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>
-                              <span style={badge("#F97316","#1a0c00")}>{e.category}</span>
+                              <span style={badge("#F97316","rgba(249,115,22,0.12)")}>{e.category}</span>
                             </div>
                             {/* Items breakdown */}
                             <div style={{fontFamily:"'Courier New',monospace",fontSize:"12px",color:C.text,marginBottom:"4px"}}>
@@ -5810,7 +5811,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
             </div>
 
             {/* 1099 disclaimer */}
-            <div style={{background:"#120c00",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px",marginBottom:"14px"}}>
+            <div style={{background:"rgba(249,115,22,0.1)",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px",marginBottom:"14px"}}>
               <div style={{fontSize:"10px",color:"#F97316",fontWeight:"700",letterSpacing:"0.12em",marginBottom:"4px"}}>1099-NEC · NEW YORK, NY · SINGLE FILER</div>
               <div style={{fontSize:"11px",color:C.muted,lineHeight:"1.6"}}>
                 Estimate covers Federal + NY State + NYC + Self-Employment tax based on <b style={{color:C.text}}>2024 brackets</b>. Brackets change yearly — verify with a CPA before filing. Married/HoH or non-resident filers will see different numbers.
@@ -5879,7 +5880,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                   </div>
 
                   {/* Bottom line */}
-                  <div style={{background:"#120c00",borderRadius:"8px",padding:"12px",marginTop:"10px"}}>
+                  <div style={{background:"rgba(249,115,22,0.1)",borderRadius:"8px",padding:"12px",marginTop:"10px"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}}>
                       <span style={{fontSize:"12px",color:C.text,fontWeight:"700"}}>TOTAL ESTIMATED TAX</span>
                       <span style={{fontSize:"18px",color:"#F97316",fontWeight:"700"}}>{fmtMoney(tax.totalTax)}</span>
@@ -6061,7 +6062,7 @@ function TaxSavingsCalc({gross, taxable}) {
         </div>
       </div>
 
-      <div style={{background:"#1a1400",border:`1px solid ${C.goldDim}`,borderRadius:"6px",padding:"10px"}}>
+      <div style={{background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"6px",padding:"10px"}}>
         <div style={{fontSize:"10px",color:C.gold,fontWeight:"700",marginBottom:"4px",letterSpacing:"0.08em"}}>⚠️ NOT TAX ADVICE</div>
         <div style={{fontSize:"10px",color:C.muted,lineHeight:"1.5"}}>
           A rough guide only. Your actual rate depends on federal bracket, NY state tax, deductions, and other income. <b style={{color:C.text}}>Verify with a CPA.</b> Self-employment tax rate (~15.3% combined Social Security + Medicare) is what I believe is current — please confirm at irs.gov.
@@ -6105,7 +6106,7 @@ function GoogleCalSetupGuide({onClose}) {
           </div>
         </div>
 
-        <div style={{background:"#1a1400",border:`1px solid ${C.goldDim}`,borderRadius:"8px",padding:"12px"}}>
+        <div style={{background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"8px",padding:"12px"}}>
           <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",marginBottom:"4px",letterSpacing:"0.08em"}}>💡 RECOMMENDATION</div>
           <div style={{fontSize:"11px",color:C.text,lineHeight:"1.6"}}>For your pitch, the "Add to Calendar" button is more than enough — it's instant and looks polished. Add full OAuth sync once BigCrew commits to deploying. That keeps complexity out of the demo phase.</div>
         </div>
