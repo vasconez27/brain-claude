@@ -1322,12 +1322,12 @@ function DailyTimeline({shifts, currentUserRosterId}) {
               width:`${widthPct}%`,
               top:"4px",
               bottom:"4px",
-              background: isActive ? C.gold : C.goldBg,
+              background: isActive ? "#E8C84A" : C.goldBg,
               border:`1px solid ${C.gold}`,
               borderRadius:"3px",
               padding:"2px 4px",
               fontSize:"9px",
-              color: isActive ? C.onaccent : C.gold,
+              color: isActive ? "#1a1400" : C.gold,
               fontWeight:"700",
               overflow:"hidden",
               whiteSpace:"nowrap",
@@ -1968,7 +1968,7 @@ function WeekStrip({state, currentUser, setScreen, setActiveShiftId}) {
               {ds.slice(0,2).map(s=>(
                 <div key={s.id} onClick={()=>{setActiveShiftId(s.id);setScreen("shift");}}
                   title={s.client}
-                  style={{width:"100%",fontSize:"7px",fontWeight:"700",color:C.onaccent,background:C.gold,borderRadius:"3px",padding:"2px 1px",cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textAlign:"center"}}>
+                  style={{width:"100%",fontSize:"7px",fontWeight:"700",color:"#1a1400",background:"#E8C84A",borderRadius:"3px",padding:"2px 1px",cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textAlign:"center"}}>
                   {s.client}
                 </div>
               ))}
@@ -2121,7 +2121,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
                 <div style={{fontSize:"13px",fontWeight:"700",color:s.id===activeShift?.id?C.gold:C.text}}>{s.client}</div>
                 <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>{s.date} · {s.callTime} · {s.location}</div>
               </div>
-              <span style={badge(s.status==="active"?"#000":C.muted,s.status==="active"?C.gold:C.s3)}>{s.status.toUpperCase()}</span>
+              <span style={badge(s.status==="active"?"#1a1400":C.muted,s.status==="active"?"#E8C84A":C.s3)}>{s.status.toUpperCase()}</span>
             </div>
           ))}
           {isManager && (
@@ -2832,7 +2832,7 @@ function CalendarScreen({state,persist,setScreen,currentUser,activeShift,setActi
                 style={{borderRadius:"8px",padding:"6px 4px",minHeight:"52px",textAlign:"center",cursor:"pointer",background:isSel?C.goldBg:isToday?C.s3:C.s1,border:`1px solid ${isSel?C.gold:isToday?C.borderHi:C.border}`,position:"relative"}}>
                 <div style={{fontSize:"13px",fontWeight:isToday?"700":"400",color:isSel?C.gold:isToday?C.text:C.muted}}>{d}</div>
                 {shifts.length>0&&<div style={{marginTop:"2px",display:"flex",justifyContent:"center",gap:"2px",flexWrap:"wrap"}}>
-                  {shifts.map(s=><div key={s.id} style={{width:"6px",height:"6px",borderRadius:"50%",background:C.gold}}/>)}
+                  {shifts.map(s=><div key={s.id} style={{width:"6px",height:"6px",borderRadius:"50%",background:"#E8C84A"}}/>)}
                 </div>}
                 {available>0&&<div style={{position:"absolute",bottom:"3px",left:"3px",width:"5px",height:"5px",borderRadius:"50%",background:C.green}}/>}
                 {unavailable>0&&<div style={{position:"absolute",bottom:"3px",right:"3px",width:"5px",height:"5px",borderRadius:"50%",background:C.red}}/>}
@@ -3391,7 +3391,7 @@ function AvailabilityScreen({state,persist,setScreen,currentUser,embedded}) {
                         style={{borderRadius:"7px",padding:"5px 2px",minHeight:"52px",textAlign:"center",cursor:"pointer",
                           background:selectedDay===d?C.goldBg:C.s1,border:`1px solid ${selectedDay===d?C.gold:isToday?C.borderHi:C.border}`}}>
                         <div style={{fontSize:"12px",fontWeight:isToday?"700":"400",color:selectedDay===d?C.gold:C.muted}}>{d}</div>
-                        {hasShift && <div style={{width:"5px",height:"5px",borderRadius:"50%",background:C.gold,margin:"2px auto"}}/>}
+                        {hasShift && <div style={{width:"5px",height:"5px",borderRadius:"50%",background:"#E8C84A",margin:"2px auto"}}/>}
                         <div style={{fontSize:"8px",color:C.green,marginTop:"1px"}}>{available>0?`${available}✓`:""}</div>
                         <div style={{fontSize:"8px",color:C.red}}>{unavailable>0?`${unavailable}✗`:""}</div>
                       </div>
@@ -5360,7 +5360,7 @@ function ReportsScreen({state, setScreen, setActiveShiftId}) {
                   <span style={{fontSize:"11px",color:C.gold}}>{fmtHours(u.hrs)} · {u.shifts} shift{u.shifts>1?"s":""}</span>
                 </div>
                 <div style={{height:"4px",background:C.s2,borderRadius:"3px",overflow:"hidden"}}>
-                  <div style={{height:"100%",width:`${(u.hrs/maxHrs)*100}%`,background:C.gold,borderRadius:"3px"}}/>
+                  <div style={{height:"100%",width:`${(u.hrs/maxHrs)*100}%`,background:"#E8C84A",borderRadius:"3px"}}/>
                 </div>
               </div>
             );
