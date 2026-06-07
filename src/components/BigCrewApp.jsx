@@ -966,11 +966,11 @@ const inp = {background:"var(--bc-inpbg)",border:`2px solid ${C.borderHi}`,borde
 const btn = (v="gold",full=false) => ({
   padding:"11px 18px",borderRadius:"8px",fontSize:"11px",fontWeight:"800",letterSpacing:"0.12em",
   textTransform:"uppercase",cursor:"pointer",fontFamily:C.font,border:"none",width:full?"100%":"auto",
-  background: v==="gold"?C.gold:v==="green"?C.green:v==="red"?C.red:v==="blue"?C.blue:v==="purple"?C.purple:C.s3,
-  color: v==="ghost"?C.muted:v==="default"?C.text:"var(--bc-onaccent)",
+  background: v==="gold"?"#E8C84A":v==="green"?C.green:v==="red"?C.red:v==="blue"?C.blue:v==="purple"?C.purple:C.s3,
+  color: v==="ghost"?C.muted:v==="default"?C.text:v==="gold"?"#1a1400":"var(--bc-onaccent)",
 });
 const badge = (color,bg) => ({background:bg,color,fontSize:"9px",letterSpacing:"0.12em",fontWeight:"800",textTransform:"uppercase",padding:"3px 8px",borderRadius:"4px",display:"inline-block",border:`1px solid ${color}22`});
-const tabBtn = (active) => ({flex:1,padding:"10px 6px",textAlign:"center",fontSize:"10px",fontWeight:"800",letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer",background:active?C.gold:"transparent",color:active?"var(--bc-onaccent)":C.muted,border:"none",fontFamily:C.font,borderRadius:"5px",transition:"all 0.15s"});
+const tabBtn = (active) => ({flex:1,padding:"10px 6px",textAlign:"center",fontSize:"10px",fontWeight:"800",letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer",background:active?"#E8C84A":"transparent",color:active?"#1a1400":C.muted,border:"none",fontFamily:C.font,borderRadius:"5px",transition:"all 0.15s"});
 
 // ── LOGO — real PNG mark ──────────────────────────────────────────────────────
 function Logo({size=40}) {
@@ -2069,7 +2069,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
               <FillBadge shift={activeShift}/>
             </div>
             <div style={{background:C.border,borderRadius:"4px",height:"3px",overflow:"hidden",marginBottom:"10px"}}>
-              <div style={{height:"100%",background:confirmed===total&&total>0?C.green:C.gold,width:`${total>0?(confirmed/total)*100:0}%`,transition:"width 0.5s ease",borderRadius:"4px"}}/>
+              <div style={{height:"100%",background:confirmed===total&&total>0?C.green:"#E8C84A",width:`${total>0?(confirmed/total)*100:0}%`,transition:"width 0.5s ease",borderRadius:"4px"}}/>
             </div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{fontSize:"11px",color:C.muted}}>📍 {activeShift.location} · Tap for details →</div>
@@ -2498,8 +2498,8 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state,persist}) {
                 {durationOpts.map(o=>(
                   <button key={o.key} onClick={()=>setDuration(o.key)} style={{
                     padding:"5px 10px",fontSize:"10px",fontWeight:"700",
-                    background:duration===o.key?C.gold:"transparent",
-                    color:duration===o.key?C.onaccent:C.gold,
+                    background:duration===o.key?"#E8C84A":"transparent",
+                    color:duration===o.key?"#1a1400":C.gold,
                     border:`1px solid ${C.gold}`,borderRadius:"5px",cursor:"pointer",fontFamily:C.font,
                   }}>{o.label}</button>
                 ))}
@@ -2546,7 +2546,7 @@ function TasksTab({shift,onToggle,state,persist,isManager}) {
         <div style={{fontSize:"13px",fontWeight:"700",color:done===shift.tasks.length&&shift.tasks.length>0?C.green:C.gold}}>{done}/{shift.tasks.length}</div>
       </div>
       <div style={{background:C.border,borderRadius:"4px",height:"3px",marginBottom:"14px",overflow:"hidden"}}>
-        <div style={{height:"100%",background:done===shift.tasks.length&&shift.tasks.length>0?C.green:C.gold,width:`${shift.tasks.length>0?(done/shift.tasks.length)*100:0}%`,transition:"width 0.4s ease",borderRadius:"4px"}}/>
+        <div style={{height:"100%",background:done===shift.tasks.length&&shift.tasks.length>0?C.green:"#E8C84A",width:`${shift.tasks.length>0?(done/shift.tasks.length)*100:0}%`,transition:"width 0.4s ease",borderRadius:"4px"}}/>
       </div>
 
       {/* Scope as tasks */}
@@ -2697,8 +2697,8 @@ function UpdatesTab({shift,state,persist,isManager}) {
             {durationOpts.map(o=>(
               <button key={o.key} onClick={()=>setDuration(o.key)} style={{
                 padding:"5px 10px",fontSize:"10px",fontWeight:"700",letterSpacing:"0.08em",
-                background: duration===o.key ? C.gold : "transparent",
-                color: duration===o.key ? C.onaccent : C.gold,
+                background: duration===o.key ? "#E8C84A" : "transparent",
+                color: duration===o.key ? "#1a1400" : C.gold,
                 border:`1px solid ${C.gold}`,borderRadius:"5px",cursor:"pointer",fontFamily:C.font,
               }}>{o.label}</button>
             ))}
@@ -2722,8 +2722,8 @@ function UpdatesTab({shift,state,persist,isManager}) {
                   {durationOpts.map(o=>(
                     <button key={o.key} onClick={()=>setEditDuration(o.key)} style={{
                       padding:"4px 8px",fontSize:"9px",
-                      background: editDuration===o.key ? C.gold : "transparent",
-                      color: editDuration===o.key ? C.onaccent : C.gold,
+                      background: editDuration===o.key ? "#E8C84A" : "transparent",
+                      color: editDuration===o.key ? "#1a1400" : C.gold,
                       border:`1px solid ${C.gold}`,borderRadius:"4px",cursor:"pointer",fontFamily:C.font,
                     }}>{o.label}</button>
                   ))}
@@ -3302,9 +3302,9 @@ function AvailabilityScreen({state,persist,setScreen,currentUser,embedded}) {
               {[{key:"spreadsheet",label:"📊 Spreadsheet"},{key:"day",label:"📅 Day View"}].map(v=>(
                 <button key={v.key} onClick={()=>setManagerView(v.key)} style={{
                   flex:1,padding:"8px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.08em",
-                  background: managerView===v.key ? C.gold : "transparent",
-                  color: managerView===v.key ? C.onaccent : C.muted,
-                  border: `1px solid ${managerView===v.key ? C.gold : C.border}`,
+                  background: managerView===v.key ? "#E8C84A" : "transparent",
+                  color: managerView===v.key ? "#1a1400" : C.muted,
+                  border: `1px solid ${managerView===v.key ? "#E8C84A" : C.border}`,
                   borderRadius:"6px",cursor:"pointer",fontFamily:C.font,
                 }}>{v.label}</button>
               ))}
@@ -3864,7 +3864,7 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
           {[{k:"blast",l:"📋 Shift Blast"},{k:"custom",l:"✏️ Custom Note"}].map(o=>(
             <button key={o.k} onClick={()=>setMsgMode(o.k)} style={{
               flex:1,padding:"9px 6px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.04em",
-              background: msgMode===o.k ? C.gold : "transparent", color: msgMode===o.k ? C.onaccent : C.muted,
+              background: msgMode===o.k ? "#E8C84A" : "transparent", color: msgMode===o.k ? "#1a1400" : C.muted,
               border:"none",borderRadius:"6px",cursor:"pointer",fontFamily:C.font,
             }}>{o.l}</button>
           ))}
@@ -4577,8 +4577,8 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
         {[{k:"name",l:"Name"},{k:"rate",l:"Confirm %"},{k:"shifts",l:"# Shifts"}].map(o=>(
           <button key={o.k} onClick={()=>setSortBy(o.k)} style={{
             padding:"4px 9px",fontSize:"9px",borderRadius:"5px",cursor:"pointer",fontFamily:C.font,
-            background:sortBy===o.k?C.gold:"transparent",color:sortBy===o.k?C.onaccent:C.muted,
-            border:`1px solid ${sortBy===o.k?C.gold:C.border}`,
+            background:sortBy===o.k?"#E8C84A":"transparent",color:sortBy===o.k?"#1a1400":C.muted,
+            border:`1px solid ${sortBy===o.k?"#E8C84A":C.border}`,
           }}>{o.l}</button>
         ))}
         <button onClick={()=>setShowArchived(v=>!v)} style={{
@@ -5101,8 +5101,8 @@ function ScheduleScreen({state, persist, setScreen, currentUser, activeShift, se
           {tabs.map(t=>(
             <button key={t.k} onClick={()=>setView(t.k)} style={{
               flex:1,padding:"9px 6px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.04em",
-              background: view===t.k ? C.gold : "transparent",
-              color: view===t.k ? C.onaccent : C.muted,
+              background: view===t.k ? "#E8C84A" : "transparent",
+              color: view===t.k ? "#1a1400" : C.muted,
               border:"none",borderRadius:"6px",cursor:"pointer",fontFamily:C.font,whiteSpace:"nowrap",
             }}>{t.label}</button>
           ))}
@@ -5319,8 +5319,8 @@ function ReportsScreen({state, setScreen, setActiveShiftId}) {
           {[{k:"week",l:"This Week"},{k:"month",l:"This Month"}].map(o=>(
             <button key={o.k} onClick={()=>setRange(o.k)} style={{
               flex:1,padding:"8px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.06em",
-              background: range===o.k ? C.gold : "transparent", color: range===o.k ? C.onaccent : C.muted,
-              border:`1px solid ${range===o.k?C.gold:C.border}`,borderRadius:"6px",cursor:"pointer",fontFamily:C.font,
+              background: range===o.k ? "#E8C84A" : "transparent", color: range===o.k ? "#1a1400" : C.muted,
+              border:`1px solid ${range===o.k?"#E8C84A":C.border}`,borderRadius:"6px",cursor:"pointer",fontFamily:C.font,
             }}>{o.l}</button>
           ))}
         </div>
@@ -5400,8 +5400,8 @@ function SectionTabs({current, tabs, setScreen}) {
         {tabs.map(t=>(
           <button key={t.screen} onClick={()=>t.screen!==current && setScreen(t.screen)} style={{
             flex:1,padding:"8px 6px",fontSize:"11px",fontWeight:"700",letterSpacing:"0.04em",
-            background: t.screen===current ? C.gold : "transparent",
-            color: t.screen===current ? C.onaccent : C.muted,
+            background: t.screen===current ? "#E8C84A" : "transparent",
+            color: t.screen===current ? "#1a1400" : C.muted,
             border:"none",borderRadius:"6px",cursor:"pointer",fontFamily:C.font,whiteSpace:"nowrap",
           }}>{t.label}</button>
         ))}
