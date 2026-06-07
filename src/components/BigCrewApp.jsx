@@ -11,11 +11,13 @@ async function load() {
     const res = await fetch("/api/workspace", { cache: "no-store" });
     if (!res.ok) return null;
     const j = await res.json();
-    return j?.data ?? null;
+    return j ? { data: j.data ?? null, updatedAt: j.updatedAt ?? null } : null;
   } catch { return null; }
 }
 // Writes are serialized through a promise chain so rapid saves land in order
 // (last write wins) instead of racing each other to the server.
+// Resolves to { ok, updatedAt } so callers can surface failures and track the
+// server's latest version (used to skip redundant poll updates).
 let _saveChain = Promise.resolve();
 async function save(d) {
   const body = JSON.stringify(d);
@@ -25,7 +27,10 @@ async function save(d) {
       headers: { "Content-Type": "application/json" },
       body,
     }))
-    .catch(e => console.error(e));
+    .then(async res => (res && res.ok)
+      ? { ok: true, updatedAt: (await res.json().catch(() => null))?.updatedAt ?? null }
+      : { ok: false })
+    .catch(e => { console.error(e); return { ok: false }; });
   return _saveChain;
 }
 
@@ -1544,6 +1549,11 @@ export default function App({ sessionUser = null }) {
   // Single source of truth for dark/light across the WHOLE site (next-themes).
   const { theme, setTheme } = useTheme();
   const autoLoggedIn = useRef(false);
+  // Live-sync bookkeeping: skip polling while a save is in flight, and remember
+  // the server's latest version so polls only apply genuinely newer data.
+  const savingRef = useRef(false);
+  const lastServerUpdatedAtRef = useRef(null);
+  const [saveError, setSaveError] = useState(false);
 
   // Apply the demo's CSS variables whenever the shared theme changes.
   useEffect(()=>{
@@ -1551,11 +1561,30 @@ export default function App({ sessionUser = null }) {
   },[theme]);
 
   useEffect(()=>{
-    load().then(saved=>{
-      if(saved) setState(s=>({...INIT,...saved}));
+    load().then(res=>{
+      if(res?.data){ setState(s=>({...INIT,...res.data})); lastServerUpdatedAtRef.current = res.updatedAt; }
       setLoaded(true);
     });
   },[]);
+
+  // Live sync: every 12s pull the shared workspace so one device sees another's
+  // changes without a refresh. Skips while we're mid-save, and only applies data
+  // the server marks as newer than what we already have (avoids clobbering our
+  // own just-saved edits or re-rendering for nothing).
+  useEffect(()=>{
+    if(!loaded) return;
+    const t = setInterval(async ()=>{
+      if(savingRef.current) return;
+      const res = await load();
+      if(!res?.data || savingRef.current) return;
+      const srv = res.updatedAt ? new Date(res.updatedAt).getTime() : 0;
+      const seen = lastServerUpdatedAtRef.current ? new Date(lastServerUpdatedAtRef.current).getTime() : 0;
+      if(srv && seen && srv <= seen) return;
+      lastServerUpdatedAtRef.current = res.updatedAt || lastServerUpdatedAtRef.current;
+      setState(s=>({...INIT,...res.data}));
+    }, 12000);
+    return ()=>clearInterval(t);
+  },[loaded]);
 
   // Auto-login from the real NextAuth session — skips the demo's own login
   // screen entirely. Role decides which portal opens (manager vs crew).
@@ -1564,10 +1593,19 @@ export default function App({ sessionUser = null }) {
     if(sessionUser.role === "manager"){
       setCurrentUser({ id:"manager", name:sessionUser.name || "Manager", role:"manager" });
     } else {
-      // Try to match a roster member by name; otherwise use a synthetic crew id.
-      const match = state.roster?.find(m => (m.name||"").toLowerCase() === (sessionUser.name||"").toLowerCase());
+      // Match the crew member to their roster entry by stable account id first
+      // (the workspace merges each crew account in with userId === id), then by
+      // email, then name as a legacy fallback. Using the real session id for the
+      // synthetic case too means confirmations attach to a stable identity rather
+      // than a throwaway "me" that never maps to their shift assignments.
+      const su = sessionUser;
+      const roster = state.roster || [];
+      const match =
+        (su.id && roster.find(m => m.userId === su.id || m.id === su.id)) ||
+        (su.email && roster.find(m => (m.email||"").toLowerCase() === su.email.toLowerCase())) ||
+        roster.find(m => (m.name||"").toLowerCase() === (su.name||"").toLowerCase());
       if(match) setCurrentUser({ id:match.id, name:match.name, role:"crew", rosterId:match.id });
-      else setCurrentUser({ id:"me", name:sessionUser.name || "Crew", role:"crew", rosterId:"me" });
+      else setCurrentUser({ id:su.id || "me", name:su.name || "Crew", role:"crew", rosterId:su.id || "me" });
     }
     autoLoggedIn.current = true;
     setScreen("home");
@@ -1580,10 +1618,24 @@ export default function App({ sessionUser = null }) {
     }
   },[currentUser, sessionUser]);
 
+  // Single save path: marks us busy (so polling backs off), records the server's
+  // new version on success, and flips the save-error banner on failure.
+  const flush = useCallback((payload) => {
+    savingRef.current = true;
+    save(payload).then(r => {
+      if (r && r.ok) {
+        if (r.updatedAt) lastServerUpdatedAtRef.current = r.updatedAt;
+        setSaveError(false);
+      } else {
+        setSaveError(true);
+      }
+    }).finally(() => { savingRef.current = false; });
+  },[]);
+
   const persist = useCallback((newState) => {
     setState(newState);
-    save({roster:newState.roster,shifts:newState.shifts,notifications:newState.notifications,availability:newState.availability,expenses:newState.expenses||[],customRoleTags:newState.customRoleTags||[]});
-  },[]);
+    flush({roster:newState.roster,shifts:newState.shifts,notifications:newState.notifications,availability:newState.availability,expenses:newState.expenses||[],customRoleTags:newState.customRoleTags||[]});
+  },[flush]);
 
   // Helper: update a single shift and auto-stamp lastUpdated.
   // Pass updater function (oldShift) => newShift or a plain shift object.
@@ -1595,10 +1647,10 @@ export default function App({ sessionUser = null }) {
         return { ...updated, lastUpdated: now(), updatedBy: updatedByName || "" };
       });
       const ns = { ...prevState, shifts: newShifts };
-      save({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[]});
+      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[]});
       return ns;
     });
-  },[]);
+  },[flush]);
 
   const activeShift = state.shifts.find(s=>s.id===activeShiftId) || state.shifts[0];
 
@@ -1622,7 +1674,25 @@ export default function App({ sessionUser = null }) {
   else if(screen==="reports") body = <ReportsScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
   else body = <HomeScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} setCurrentUser={setCurrentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
 
-  return <>{body}<ThemeToggle theme={theme} setTheme={setTheme}/></>;
+  return <>{body}<ThemeToggle theme={theme} setTheme={setTheme}/>{saveError && <SaveErrorBanner onRetry={()=>{ setSaveError(false); flush({roster:state.roster,shifts:state.shifts,notifications:state.notifications,availability:state.availability,expenses:state.expenses||[],customRoleTags:state.customRoleTags||[]}); }} onDismiss={()=>setSaveError(false)}/>}</>;
+}
+
+// Shown when a write to the shared workspace fails, so a user never thinks an
+// edit saved when it didn't. Retry re-sends the current state.
+function SaveErrorBanner({onRetry, onDismiss}) {
+  return (
+    <div style={{position:"fixed",left:"50%",bottom:"16px",transform:"translateX(-50%)",zIndex:400,
+      background:C.redBg,border:`1.5px solid ${C.red}`,borderRadius:"10px",padding:"10px 12px",
+      display:"flex",alignItems:"center",gap:"10px",maxWidth:"92%",boxShadow:"0 6px 20px rgba(0,0,0,0.3)",fontFamily:C.font}}>
+      <span style={{fontSize:"16px"}}>⚠️</span>
+      <div style={{fontSize:"11px",color:C.text,lineHeight:1.4}}>
+        <div style={{fontWeight:"700",color:C.red}}>Couldn’t save</div>
+        <div style={{color:C.muted}}>Your last change didn’t reach the server.</div>
+      </div>
+      <button onClick={onRetry} style={{...btn("red"),padding:"6px 12px",fontSize:"10px"}}>RETRY</button>
+      <button onClick={onDismiss} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"16px",lineHeight:1,padding:"0 2px"}}>✕</button>
+    </div>
+  );
 }
 
 function ThemeToggle({theme, setTheme}) {
