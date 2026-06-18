@@ -1591,21 +1591,38 @@ export default function App({ sessionUser = null }) {
   useEffect(()=>{
     if(!sessionUser || !loaded || autoLoggedIn.current) return;
     if(sessionUser.role === "manager"){
-      setCurrentUser({ id:"manager", name:sessionUser.name || "Manager", role:"manager" });
+      // Use the real account id so each manager has a distinct, stable identity —
+      // a hardcoded "manager" string made every manager share one expense bucket.
+      setCurrentUser({ id: sessionUser.id || "manager", name:sessionUser.name || "Manager", role:"manager" });
     } else {
-      // Match the crew member to their roster entry by stable account id first
-      // (the workspace merges each crew account in with userId === id), then by
-      // email, then name as a legacy fallback. Using the real session id for the
-      // synthetic case too means confirmations attach to a stable identity rather
-      // than a throwaway "me" that never maps to their shift assignments.
+      // Match the crew member to their roster entry by stable account id first,
+      // then by email, then name as a legacy fallback.
       const su = sessionUser;
       const roster = state.roster || [];
       const match =
         (su.id && roster.find(m => m.userId === su.id || m.id === su.id)) ||
         (su.email && roster.find(m => (m.email||"").toLowerCase() === su.email.toLowerCase())) ||
         roster.find(m => (m.name||"").toLowerCase() === (su.name||"").toLowerCase());
-      if(match) setCurrentUser({ id:match.id, name:match.name, role:"crew", rosterId:match.id });
-      else setCurrentUser({ id:su.id || "me", name:su.name || "Crew", role:"crew", rosterId:su.id || "me" });
+      if(match){
+        // Backfill the stable account id (and email) onto the roster entry so
+        // every future login matches instantly and confirmations/hours always
+        // attach to the same person — not a throwaway identity.
+        if(su.id && match.userId !== su.id){
+          persist({...state, roster: roster.map(m => m.id===match.id
+            ? {...m, userId: su.id, email: m.email || su.email || ""} : m)});
+        }
+        setCurrentUser({ id:match.id, name:match.name, role:"crew", rosterId:match.id });
+      } else {
+        // First sign-in with no manager-created roster entry: self-register them so
+        // they appear in the roster for assignment and own a stable identity.
+        const newMember = {
+          id: uid(), userId: su.id || undefined, name: su.name || "Crew",
+          role:"Crew", position:"Crew", phone:"", email: su.email || "", pin:"",
+          available:true, active:true, notes:"", tags:[], selfRegistered:true,
+        };
+        persist({...state, roster:[...roster, newMember]});
+        setCurrentUser({ id:newMember.id, name:newMember.name, role:"crew", rosterId:newMember.id });
+      }
     }
     autoLoggedIn.current = true;
     setScreen("home");
@@ -1621,6 +1638,11 @@ export default function App({ sessionUser = null }) {
   // Single save path: marks us busy (so polling backs off), records the server's
   // new version on success, and flips the save-error banner on failure.
   const flush = useCallback((payload) => {
+    // Keep the notification log bounded — it's prepended newest-first, so trim the
+    // tail. Without this it grows forever and bloats every load/poll.
+    if (payload && Array.isArray(payload.notifications) && payload.notifications.length > 60) {
+      payload = { ...payload, notifications: payload.notifications.slice(0, 60) };
+    }
     savingRef.current = true;
     save(payload).then(r => {
       if (r && r.ok) {
@@ -2072,7 +2094,13 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
   }
 
   const myNotifs = state.notifications
-    .filter(n => (n.to===currentUser.id||n.to==="all") && !dismissed.has(n.id))
+    .filter(n => {
+      if(dismissed.has(n.id)) return false;
+      if(n.to==="all") return true;                       // genuine all-hands broadcast
+      if(n.to===currentUser.id) return true;              // addressed to me directly
+      if(n.toIds && n.toIds.includes(currentUser.id)) return true; // scoped to a shift's crew
+      return false;
+    })
     .slice(0, 3);
 
   return (
@@ -2181,10 +2209,10 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
           ))}
         </div>
 
-        {/* All Shifts */}
-        <span style={lbl}>All Shifts</span>
+        {/* All Shifts — managers see every shift; crew see only shifts they're on */}
+        <span style={lbl}>{isManager?"All Shifts":"Your Shifts"}</span>
         <div style={{display:"flex",flexDirection:"column",gap:"6px",marginTop:"8px"}}>
-          {state.shifts.map(s=>(
+          {(isManager ? state.shifts : state.shifts.filter(s=>s.crew?.some(c=>c.rosterId===currentUser.id||c.id===currentUser.id))).map(s=>(
             <div key={s.id} onClick={()=>{setActiveShiftId(s.id);setScreen("shift");}}
               style={{...card({border:`1px solid ${s.id===activeShift?.id?C.gold:C.border}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"})}} >
               <div>
@@ -2380,7 +2408,8 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state,persist}) {
     if(!msg.trim()) return;
     const expMs=durationToMs(duration);
     const ann={id:uid(),text:msg.trim(),ts:now(),from:"Management",expiresAt:expMs?now()+expMs:null,duration};
-    const notif={id:uid(),to:"all",text:msg.trim(),ts:now(),shiftId:shift.id};
+    // Scope the alert to the crew on THIS shift, not every crew member in the app.
+    const notif={id:uid(),to:"shift",toIds:(shift.crew||[]).map(c=>c.rosterId||c.id),text:msg.trim(),ts:now(),shiftId:shift.id};
     persist({...state,shifts:state.shifts.map(s=>s.id===shift.id?{...s,announcements:[ann,...s.announcements],lastUpdated:now()}:s),notifications:[notif,...state.notifications]});
     setMsg("");setDuration("forever");
   }
@@ -2692,7 +2721,7 @@ function UpdatesTab({shift,state,persist,isManager}) {
       expiresAt: expMs ? now() + expMs : null,
       duration,
     };
-    const notif = {id:uid(),to:"all",text:msg.trim(),ts:now(),shiftId:shift.id};
+    const notif = {id:uid(),to:"shift",toIds:(shift.crew||[]).map(c=>c.rosterId||c.id),text:msg.trim(),ts:now(),shiftId:shift.id};
     persist({
       ...state,
       shifts: state.shifts.map(s => s.id===shift.id
@@ -3891,8 +3920,9 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
     // Post the full briefing onto the shift (crew see it under the shift's Updates)
     // AND drop a dashboard notification so every crew member is alerted in-app.
     const ann = {id:uid(), text:messageText, ts:now(), from:"Management"};
+    // Only the crew assigned to this shift should be alerted about it.
     const notif = {
-      id:uid(), to:"all", shiftId:activeShift.id, ts:now(),
+      id:uid(), to:"shift", toIds:(activeShift.crew||[]).map(c=>c.rosterId||c.id), shiftId:activeShift.id, ts:now(),
       text:`📋 ${form.client} · ${form.date} — shift details posted. Open your shift to view & confirm.`,
     };
     persist({
@@ -3906,13 +3936,20 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
     setTimeout(()=>setPosted(false), 2500);
   }
 
-  // Build recipient lists
-  const crewEmails = (activeShift.crew||[]).filter(c=>includedCrew.includes(c.id) && c.email).map(c=>c.email);
+  // Build recipient lists. Resolve contact info from the CURRENT roster (by
+  // rosterId) so a number/email the manager updated after the shift was created
+  // is used — falling back to the snapshot on the crew entry if not on roster.
+  const contactFor = (c) => {
+    const r = state.roster.find(m => m.id === (c.rosterId||c.id));
+    return { email: (r?.email)||c.email||"", phone: (r?.phone)||c.phone||"" };
+  };
+  const includedCrewObjs = (activeShift.crew||[]).filter(c=>includedCrew.includes(c.id));
+  const crewEmails = includedCrewObjs.map(contactFor).map(x=>x.email).filter(Boolean);
   const extraEmails = extraRecipients.filter(r=>r.email).map(r=>r.email);
   const manualList = manualEmails ? manualEmails.split(",").map(e=>e.trim()).filter(Boolean) : [];
   const allEmails = [...crewEmails, ...extraEmails, ...manualList];
 
-  const crewPhones = (activeShift.crew||[]).filter(c=>includedCrew.includes(c.id) && c.phone).map(c=>c.phone);
+  const crewPhones = includedCrewObjs.map(contactFor).map(x=>x.phone).filter(Boolean);
   const extraPhones = extraRecipients.filter(r=>r.phone).map(r=>r.phone);
   const allPhones = [...crewPhones, ...extraPhones];
 
