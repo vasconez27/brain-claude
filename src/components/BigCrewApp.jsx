@@ -1586,6 +1586,31 @@ export default function App({ sessionUser = null }) {
     return ()=>clearInterval(t);
   },[loaded]);
 
+  // Single save path: marks us busy (so polling backs off), records the server's
+  // new version on success, and flips the save-error banner on failure.
+  // Declared before the effects below so the auto-login effect can call it.
+  const flush = useCallback((payload) => {
+    // Keep the notification log bounded — it's prepended newest-first, so trim the
+    // tail. Without this it grows forever and bloats every load/poll.
+    if (payload && Array.isArray(payload.notifications) && payload.notifications.length > 60) {
+      payload = { ...payload, notifications: payload.notifications.slice(0, 60) };
+    }
+    savingRef.current = true;
+    save(payload).then(r => {
+      if (r && r.ok) {
+        if (r.updatedAt) lastServerUpdatedAtRef.current = r.updatedAt;
+        setSaveError(false);
+      } else {
+        setSaveError(true);
+      }
+    }).finally(() => { savingRef.current = false; });
+  },[]);
+
+  const persist = useCallback((newState) => {
+    setState(newState);
+    flush({roster:newState.roster,shifts:newState.shifts,notifications:newState.notifications,availability:newState.availability,expenses:newState.expenses||[],customRoleTags:newState.customRoleTags||[]});
+  },[flush]);
+
   // Auto-login from the real NextAuth session — skips the demo's own login
   // screen entirely. Role decides which portal opens (manager vs crew).
   useEffect(()=>{
@@ -1634,30 +1659,6 @@ export default function App({ sessionUser = null }) {
       window.location.href = "/api/auth/signout?callbackUrl=/login";
     }
   },[currentUser, sessionUser]);
-
-  // Single save path: marks us busy (so polling backs off), records the server's
-  // new version on success, and flips the save-error banner on failure.
-  const flush = useCallback((payload) => {
-    // Keep the notification log bounded — it's prepended newest-first, so trim the
-    // tail. Without this it grows forever and bloats every load/poll.
-    if (payload && Array.isArray(payload.notifications) && payload.notifications.length > 60) {
-      payload = { ...payload, notifications: payload.notifications.slice(0, 60) };
-    }
-    savingRef.current = true;
-    save(payload).then(r => {
-      if (r && r.ok) {
-        if (r.updatedAt) lastServerUpdatedAtRef.current = r.updatedAt;
-        setSaveError(false);
-      } else {
-        setSaveError(true);
-      }
-    }).finally(() => { savingRef.current = false; });
-  },[]);
-
-  const persist = useCallback((newState) => {
-    setState(newState);
-    flush({roster:newState.roster,shifts:newState.shifts,notifications:newState.notifications,availability:newState.availability,expenses:newState.expenses||[],customRoleTags:newState.customRoleTags||[]});
-  },[flush]);
 
   // Helper: update a single shift and auto-stamp lastUpdated.
   // Pass updater function (oldShift) => newShift or a plain shift object.
