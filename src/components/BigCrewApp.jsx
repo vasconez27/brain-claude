@@ -2874,10 +2874,14 @@ function CalendarScreen({state,persist,setScreen,currentUser,activeShift,setActi
   const firstDay = new Date(year,month,1).getDay();
   const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
+  // Managers see every shift; crew only see shifts they're assigned to.
+  const isManager = currentUser.role==="manager";
+  const visibleShifts = isManager
+    ? state.shifts
+    : state.shifts.filter(s=>s.crew?.some(c=>c.rosterId===currentUser.id||c.id===currentUser.id));
+
   function getShiftsForDay(d) {
-    const pad = n=>String(n).padStart(2,"0");
-    const yy = year, mm = pad(month+1), dd = pad(d);
-    return state.shifts.filter(s=>{
+    return visibleShifts.filter(s=>{
       const parts = s.date.split("/");
       if(parts.length<3) return false;
       return parseInt(parts[0])===month+1 && parseInt(parts[1])===d && parts[2]===String(year);
@@ -3553,8 +3557,14 @@ function AvailabilityScreen({state,persist,setScreen,currentUser,embedded}) {
 // ══════════════════════════════════════════════════════════════════════════════
 // WEEKLY SCHEDULE GRID – visual 7-day × hourly view (managers)
 // ══════════════════════════════════════════════════════════════════════════════
-function WeekGridScreen({state, setScreen, setActiveShiftId, embedded}) {
+function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUser}) {
   const [weekStart, setWeekStart] = useState(getWeekStart(new Date()));
+
+  // Managers see every shift; crew only see shifts they're assigned to.
+  const isManager = !currentUser || currentUser.role==="manager";
+  const visibleShifts = isManager
+    ? state.shifts
+    : state.shifts.filter(s=>s.crew?.some(c=>c.rosterId===currentUser.id||c.id===currentUser.id));
 
   // 7 days starting Monday
   const days = Array.from({length:7}, (_,i)=>{
@@ -3569,7 +3579,7 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded}) {
 
   // Compute shifts on a given Date (calendar day match)
   function shiftsOn(date) {
-    return state.shifts.filter(s=>{
+    return visibleShifts.filter(s=>{
       const start = parseShiftStart(s.date, s.callTime);
       if(!start) return false;
       return start.getFullYear()===date.getFullYear() &&
@@ -5216,7 +5226,7 @@ function ScheduleScreen({state, persist, setScreen, currentUser, activeShift, se
         </div>
       </div>
       {view==="calendar" && <CalendarScreen embedded state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>}
-      {view==="week" && <WeekGridScreen embedded state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>}
+      {view==="week" && <WeekGridScreen embedded state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>}
       {view==="avail" && <AvailabilityScreen embedded state={state} persist={persist} setScreen={setScreen} currentUser={currentUser}/>}
     </div>
   );
