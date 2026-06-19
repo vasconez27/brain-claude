@@ -2079,6 +2079,10 @@ function WeekStrip({state, currentUser, setScreen, setActiveShiftId}) {
 
 function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, activeShift, setActiveShiftId}) {
   const isManager = currentUser.role==="manager";
+  // Managers see every shift; crew see only the shifts they're assigned to.
+  const visibleShifts = isManager
+    ? state.shifts
+    : state.shifts.filter(s=>s.crew?.some(c=>c.rosterId===currentUser.id||c.id===currentUser.id));
   const confirmed = activeShift?.crew.filter(c=>c.confirmed).length||0;
   const total = activeShift?.crew.length||0;
   const myCrewEntry = activeShift?.crew.find(c=>c.rosterId===currentUser.id||c.id===currentUser.id);
@@ -2213,7 +2217,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
         {/* All Shifts — managers see every shift; crew see only shifts they're on */}
         <span style={lbl}>{isManager?"All Shifts":"Your Shifts"}</span>
         <div style={{display:"flex",flexDirection:"column",gap:"6px",marginTop:"8px"}}>
-          {(isManager ? state.shifts : state.shifts.filter(s=>s.crew?.some(c=>c.rosterId===currentUser.id||c.id===currentUser.id))).map(s=>(
+          {visibleShifts.map(s=>(
             <div key={s.id} onClick={()=>{setActiveShiftId(s.id);setScreen("shift");}}
               style={{...card({border:`1px solid ${s.id===activeShift?.id?C.gold:C.border}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"})}} >
               <div>
@@ -2223,6 +2227,12 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
               <span style={badge(s.status==="active"?"#1a1400":C.muted,s.status==="active"?"#E8C84A":C.s3)}>{s.status.toUpperCase()}</span>
             </div>
           ))}
+          {!isManager && visibleShifts.length===0 && (
+            <div style={{...card({textAlign:"center",color:C.muted,fontSize:"12px",border:`1px dashed ${C.border}`,padding:"22px 14px"})}}>
+              No shifts assigned to you yet.<br/>
+              <span style={{fontSize:"11px",color:C.dim}}>They'll show up here once your manager adds you to one.</span>
+            </div>
+          )}
           {isManager && (
             <button onClick={()=>setScreen("newshift")} style={{...card({background:"transparent",border:`1px dashed ${C.border}`,cursor:"pointer",textAlign:"center",color:C.muted,fontSize:"12px",fontFamily:C.font})}} >
               + Create New Shift
