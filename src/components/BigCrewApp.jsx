@@ -4800,7 +4800,13 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
     const reqPos = parseInt(form.requiredPositions) || crew.length || 1;
     const newShift={id:uid(),status:"active",pipelineStatus:null,requiredPositions:reqPos,confirmationRequired:true,...form,date:displayDate,scope:scopeLines.filter(l=>l.trim()),crew,announcements:[],tasks:[],createdAt:now(),lastUpdated:now(),updatedBy:currentUser?.name||""};
     const newShifts=[...state.shifts,newShift];
-    persist({...state,shifts:newShifts});
+    // Alert assigned crew right now — not only after the blast step, which
+    // managers can get pulled away from before finishing.
+    const notifs = crew.length ? [{
+      id:uid(), to:"shift", toIds:crew.map(c=>c.rosterId||c.id), shiftId:newShift.id, ts:now(),
+      text:`🆕 New shift: ${newShift.client} · ${displayDate} · Call ${newShift.callTime} — open it to confirm.`,
+    }, ...state.notifications] : state.notifications;
+    persist({...state,shifts:newShifts,notifications:notifs});
     setActiveShiftId(newShift.id);
     setScreen("message");
   }
