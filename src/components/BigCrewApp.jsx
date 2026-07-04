@@ -2704,173 +2704,6 @@ function TasksTab({shift,onToggle,state,persist,isManager}) {
   );
 }
 
-function UpdatesTab({shift,state,persist,isManager}) {
-  const [msg,setMsg]=useState("");
-  const [duration,setDuration]=useState("forever"); // forever | 1h | 4h | 24h | 7d
-  const [editing,setEditing]=useState(null);
-  const [editText,setEditText]=useState("");
-  const [editDuration,setEditDuration]=useState("forever");
-  const [, force] = useState(0);
-  useEffect(()=>{
-    const t = setInterval(()=>force(n=>n+1), 30000); // re-render so expired annos update
-    return ()=>clearInterval(t);
-  },[]);
-
-  function durationToMs(d) {
-    if (d === "1h") return 3600000;
-    if (d === "4h") return 4 * 3600000;
-    if (d === "24h") return 24 * 3600000;
-    if (d === "7d") return 7 * 24 * 3600000;
-    return null;
-  }
-
-  function post(){
-    if(!msg.trim()) return;
-    const expMs = durationToMs(duration);
-    const ann = {
-      id:uid(), text:msg.trim(), ts:now(), from:"Management",
-      expiresAt: expMs ? now() + expMs : null,
-      duration,
-    };
-    const notif = {id:uid(),to:"shift",toIds:(shift.crew||[]).map(c=>c.rosterId||c.id),text:msg.trim(),ts:now(),shiftId:shift.id};
-    persist({
-      ...state,
-      shifts: state.shifts.map(s => s.id===shift.id
-        ? {...s, announcements:[ann, ...s.announcements], lastUpdated:now()}
-        : s),
-      notifications:[notif, ...state.notifications],
-    });
-    setMsg("");
-    setDuration("forever");
-  }
-
-  function saveEdit(aid) {
-    if (!editText.trim()) return;
-    const expMs = durationToMs(editDuration);
-    persist({
-      ...state,
-      shifts: state.shifts.map(s => s.id===shift.id
-        ? {
-            ...s,
-            announcements: s.announcements.map(a => a.id===aid
-              ? {...a, text:editText.trim(), editedAt:now(), expiresAt: expMs ? now() + expMs : null, duration:editDuration}
-              : a),
-            lastUpdated: now(),
-          }
-        : s),
-    });
-    setEditing(null);
-    setEditText("");
-  }
-
-  function deleteAnno(aid) {
-    if (!confirm("Delete this announcement?")) return;
-    persist({
-      ...state,
-      shifts: state.shifts.map(s => s.id===shift.id
-        ? {...s, announcements: s.announcements.filter(a => a.id !== aid), lastUpdated:now()}
-        : s),
-    });
-  }
-
-  function isExpired(a) {
-    return a.expiresAt && Date.now() > a.expiresAt;
-  }
-  function timeRemaining(a) {
-    if (!a.expiresAt) return "no expiration";
-    const ms = a.expiresAt - Date.now();
-    if (ms <= 0) return "expired";
-    const hrs = ms / 3600000;
-    if (hrs < 1) return `${Math.ceil(ms/60000)}m left`;
-    if (hrs < 24) return `${Math.ceil(hrs)}h left`;
-    return `${Math.ceil(hrs/24)}d left`;
-  }
-
-  const durationOpts = [
-    {key:"1h", label:"1h"},
-    {key:"4h", label:"4h"},
-    {key:"24h", label:"24h"},
-    {key:"7d", label:"7d"},
-    {key:"forever", label:"∞"},
-  ];
-
-  return (
-    <div style={{animation:"fadeUp 0.3s ease"}}>
-      {isManager && (
-        <div style={{marginBottom:"14px"}}>
-          <span style={lbl}>📢 Post Update to Crew</span>
-          <textarea value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Type message..."
-            style={{...inp,minHeight:"80px",resize:"vertical",marginTop:"6px",marginBottom:"8px"}}/>
-          {/* Duration picker */}
-          <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"10px",flexWrap:"wrap"}}>
-            <span style={{fontSize:"10px",color:C.muted,letterSpacing:"0.1em"}}>EXPIRES IN:</span>
-            {durationOpts.map(o=>(
-              <button key={o.key} onClick={()=>setDuration(o.key)} style={{
-                padding:"5px 10px",fontSize:"10px",fontWeight:"700",letterSpacing:"0.08em",
-                background: duration===o.key ? "#E8C84A" : "transparent",
-                color: duration===o.key ? "#1a1400" : C.gold,
-                border:`1px solid ${C.gold}`,borderRadius:"5px",cursor:"pointer",fontFamily:C.font,
-              }}>{o.label}</button>
-            ))}
-          </div>
-          <button onClick={post} disabled={!msg.trim()} style={{...btn("gold",true),opacity:msg.trim()?1:0.5}}>📢 POST UPDATE</button>
-        </div>
-      )}
-
-      <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
-        {shift.announcements.length===0 && (
-          <div style={{textAlign:"center",color:C.muted,fontSize:"12px",padding:"24px 0"}}>No updates yet</div>
-        )}
-        {shift.announcements.map(a => {
-          const expired = isExpired(a);
-          if (editing === a.id) {
-            return (
-              <div key={a.id} style={{...card({border:`1.5px solid ${C.gold}`})}}>
-                <textarea value={editText} onChange={e=>setEditText(e.target.value)} style={{...inp,minHeight:"60px",resize:"vertical",marginBottom:"8px"}}/>
-                <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"10px",flexWrap:"wrap"}}>
-                  <span style={{fontSize:"10px",color:C.muted}}>EXPIRES IN:</span>
-                  {durationOpts.map(o=>(
-                    <button key={o.key} onClick={()=>setEditDuration(o.key)} style={{
-                      padding:"4px 8px",fontSize:"9px",
-                      background: editDuration===o.key ? "#E8C84A" : "transparent",
-                      color: editDuration===o.key ? "#1a1400" : C.gold,
-                      border:`1px solid ${C.gold}`,borderRadius:"4px",cursor:"pointer",fontFamily:C.font,
-                    }}>{o.label}</button>
-                  ))}
-                </div>
-                <div style={{display:"flex",gap:"6px"}}>
-                  <button onClick={()=>saveEdit(a.id)} style={{...btn("gold"),flex:1}}>SAVE</button>
-                  <button onClick={()=>{setEditing(null);setEditText("");}} style={{...btn("ghost"),flex:1,border:`1px solid ${C.border}`}}>CANCEL</button>
-                </div>
-              </div>
-            );
-          }
-          return (
-            <div key={a.id} style={{...card({border:`1px solid ${expired?C.border:C.goldDim}`,opacity:expired?0.55:1})}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}}>
-                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                  <span style={badge(C.gold,C.goldBg)}>Management</span>
-                  {expired && <span style={badge(C.muted,C.s3)}>EXPIRED</span>}
-                  {!expired && a.expiresAt && <span style={badge(C.green,"transparent")}>{timeRemaining(a)}</span>}
-                </div>
-                <span style={{fontSize:"10px",color:C.dim}}>{fmt(a.ts)}{a.editedAt?" · edited":""}</span>
-              </div>
-              <div style={{fontSize:"12px",lineHeight:"1.5",color:C.text,textDecoration:expired?"line-through":"none"}}>{a.text}</div>
-              {isManager && (
-                <div style={{display:"flex",gap:"6px",marginTop:"10px"}}>
-                  <button onClick={()=>{setEditing(a.id);setEditText(a.text);setEditDuration(a.duration||"forever");}}
-                    style={{...btn("ghost"),padding:"5px 10px",fontSize:"10px",border:`1px solid ${C.border}`}}>EDIT</button>
-                  <button onClick={()=>deleteAnno(a.id)}
-                    style={{...btn("ghost"),padding:"5px 10px",fontSize:"10px",border:`1px solid ${C.redBg}`,color:C.red}}>DELETE</button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CALENDAR
@@ -2911,9 +2744,6 @@ function CalendarScreen({state,persist,setScreen,currentUser,activeShift,setActi
 
   return (
     <div style={embedded?{}:{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
-      {!embedded && <style>{GS}</style>}
-      {!embedded && <PageHeader title="Calendar" sub="Active Schedule" onBack={()=>setScreen("home")}/>}
-      {!embedded && <SectionTabs current="calendar" setScreen={setScreen} tabs={[{label:"📅 Calendar",screen:"calendar"},{label:"📊 Week",screen:"weekgrid"},{label:"🗓 Availability",screen:"availability"}]}/>}
 
       <div className="bcn-body" style={{paddingBottom:"80px"}}>
         {/* Month nav */}
@@ -3329,9 +3159,6 @@ function AvailabilityScreen({state,persist,setScreen,currentUser,embedded}) {
 
   return (
     <div style={embedded?{}:{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
-      {!embedded && <style>{GS}</style>}
-      {!embedded && <PageHeader title="Availability" sub={isManager?"All Crew · Spreadsheet":"Set Your Availability"} onBack={()=>setScreen("home")}/>}
-      {!embedded && <SectionTabs current="availability" setScreen={setScreen} tabs={[{label:"📅 Calendar",screen:"calendar"},{label:"📊 Week",screen:"weekgrid"},{label:"🗓 Availability",screen:"availability"}]}/>}
 
       <div className="bcn-body" style={{paddingBottom:"80px"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"14px"}}>
@@ -3649,9 +3476,6 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUs
 
   return (
     <div style={embedded?{}:{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
-      {!embedded && <style>{GS}</style>}
-      {!embedded && <PageHeader title="Weekly Grid" sub="Hour-block schedule view" onBack={()=>setScreen("home")}/>}
-      {!embedded && <SectionTabs current="weekgrid" setScreen={setScreen} tabs={[{label:"📅 Calendar",screen:"calendar"},{label:"📊 Week",screen:"weekgrid"},{label:"🗓 Availability",screen:"availability"}]}/>}
 
       <div className="bcn-body">
         {/* Week nav */}
@@ -3936,7 +3760,6 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
       pocPhone: form.pocPhone,
       uniform: form.uniform,
       scope: form.scope.filter(s=>s.trim()),
-      generatedMsg: messageText,
     };
     // Post the full briefing onto the shift (crew see it under the shift's Updates)
     // AND drop a dashboard notification so every crew member is alerted in-app.
@@ -4959,7 +4782,7 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
       return r?{id:uid(),rosterId:r.id,name:r.name,role:r.role,roleTag:s.roleTag,phone:r.phone||"",email:r.email||"",confirmed:false,confirmedAt:null,declined:false,declinedAt:null,clockIn:null,clockOut:null,absent:false,manualHours:null}:null;
     }).filter(Boolean);
     const reqPos = parseInt(form.requiredPositions) || crew.length || 1;
-    const newShift={id:uid(),status:"active",pipelineStatus:null,requiredPositions:reqPos,confirmationRequired:true,...form,date:displayDate,scope:scopeLines.filter(l=>l.trim()),crew,announcements:[],tasks:[],generatedMsg:"",createdAt:now(),lastUpdated:now(),updatedBy:currentUser?.name||""};
+    const newShift={id:uid(),status:"active",pipelineStatus:null,requiredPositions:reqPos,confirmationRequired:true,...form,date:displayDate,scope:scopeLines.filter(l=>l.trim()),crew,announcements:[],tasks:[],createdAt:now(),lastUpdated:now(),updatedBy:currentUser?.name||""};
     const newShifts=[...state.shifts,newShift];
     persist({...state,shifts:newShifts});
     setActiveShiftId(newShift.id);
