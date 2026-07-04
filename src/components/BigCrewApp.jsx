@@ -1697,7 +1697,7 @@ export default function App({ sessionUser = null }) {
   else if(screen==="shift") body = <ShiftScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift}/>;
   else if(screen==="admin") body = <AdminScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
   else if(screen==="roster") body = <RosterScreen state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
-  else if(screen==="search") body = <SearchScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
+  else if(screen==="search") body = <SearchScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>;
   else if(screen==="reports") body = <ReportsScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
   else body = <HomeScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} setCurrentUser={setCurrentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
 
@@ -5112,19 +5112,26 @@ function ScheduleScreen({state, persist, setScreen, currentUser, activeShift, se
 // ══════════════════════════════════════════════════════════════════════════════
 // GLOBAL SEARCH
 // ══════════════════════════════════════════════════════════════════════════════
-function SearchScreen({state, setScreen, setActiveShiftId}) {
+function SearchScreen({state, setScreen, setActiveShiftId, currentUser}) {
   const [q, setQ] = useState("");
   const query = q.trim().toLowerCase();
+  const isManager = currentUser?.role==="manager";
+
+  // Crew search only their own world: shifts they're assigned to, no roster
+  // browsing — client lists, addresses, and coworker contacts are the
+  // manager's data, not something any signed-in worker should mine.
+  const searchableShifts = isManager ? state.shifts
+    : state.shifts.filter(s => s.crew?.some(c => c.rosterId===currentUser?.id || c.id===currentUser?.id));
 
   let crew = [], shifts = [], clients = [], locations = [];
   if (query) {
-    crew = state.roster.filter(m =>
+    crew = !isManager ? [] : state.roster.filter(m =>
       m.name.toLowerCase().includes(query) ||
       (m.position||"").toLowerCase().includes(query) ||
       (m.phone||"").includes(query) ||
       (m.email||"").toLowerCase().includes(query)
     );
-    shifts = state.shifts.filter(s =>
+    shifts = searchableShifts.filter(s =>
       (s.client||"").toLowerCase().includes(query) ||
       (s.location||"").toLowerCase().includes(query) ||
       (s.address||"").toLowerCase().includes(query) ||
@@ -5132,10 +5139,10 @@ function SearchScreen({state, setScreen, setActiveShiftId}) {
       (s.date||"").includes(query)
     );
     const clientSet = new Set();
-    state.shifts.forEach(s => { if((s.client||"").toLowerCase().includes(query)) clientSet.add(s.client); });
+    searchableShifts.forEach(s => { if((s.client||"").toLowerCase().includes(query)) clientSet.add(s.client); });
     clients = [...clientSet];
     const locSet = new Set();
-    state.shifts.forEach(s => { if((s.location||"").toLowerCase().includes(query) || (s.address||"").toLowerCase().includes(query)) locSet.add(s.location+(s.address?` — ${s.address}`:"")); });
+    searchableShifts.forEach(s => { if((s.location||"").toLowerCase().includes(query) || (s.address||"").toLowerCase().includes(query)) locSet.add(s.location+(s.address?` — ${s.address}`:"")); });
     locations = [...locSet];
   }
 
@@ -5146,14 +5153,16 @@ function SearchScreen({state, setScreen, setActiveShiftId}) {
   return (
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
       <style>{GS}</style>
-      <PageHeader title="Search" sub="Crew · Shifts · Clients · Locations" onBack={()=>setScreen("home")}/>
+      <PageHeader title="Search" sub={isManager?"Crew · Shifts · Clients · Locations":"Your Shifts"} onBack={()=>setScreen("home")}/>
       <div className="bcn-body" style={{paddingBottom:"80px"}}>
         <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 Search everything…"
           style={{...inp,fontSize:"15px",padding:"12px 14px",marginBottom:"14px"}}/>
 
         {!query && (
           <div style={{textAlign:"center",color:C.muted,fontSize:"12px",padding:"40px 20px",lineHeight:"1.6"}}>
-            Search across your entire operation —<br/>crew members, shifts, clients, and locations.
+            {isManager
+              ? <>Search across your entire operation —<br/>crew members, shifts, clients, and locations.</>
+              : <>Search your shifts —<br/>by client, location, date, or notes.</>}
           </div>
         )}
 
