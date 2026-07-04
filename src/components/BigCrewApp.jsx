@@ -2255,7 +2255,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
                   );
                 })()}
               </div>
-              <span style={badge(s.status==="active"?"#1a1400":C.muted,s.status==="active"?"#E8C84A":C.s3)}>{s.status.toUpperCase()}</span>
+              <span style={badge(s.status==="active"?"#1a1400":C.muted,s.status==="active"?"#E8C84A":C.s3)}>{(s.status||"active").toUpperCase()}</span>
             </div>
           ))}
           {!isManager && visibleShifts.length===0 && (
@@ -2859,7 +2859,7 @@ function CalendarScreen({state,persist,setScreen,currentUser,activeShift,setActi
                     <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",background:C.s1,borderRadius:"7px",border:`1px solid ${C.border}`}}>
                       <span style={{fontSize:"12px",color:C.text}}>{a.name}</span>
                       <span style={badge(a.status==="available"?C.green:a.status==="tentative"?C.gold:C.red,a.status==="available"?C.greenBg:a.status==="tentative"?C.goldBg:C.redBg)}>
-                        {a.status.toUpperCase()}
+                        {(a.status||"").toUpperCase()}
                       </span>
                     </div>
                   ))}
