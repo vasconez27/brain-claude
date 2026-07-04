@@ -1693,6 +1693,7 @@ export default function App({ sessionUser = null }) {
   else if(screen==="message") body = <MessageScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} activeShift={activeShift} currentUser={currentUser}/>;
   else if(screen==="shift") body = <ShiftScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift}/>;
   else if(screen==="admin") body = <AdminScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
+  else if(screen==="roster") body = <RosterScreen state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
   else if(screen==="search") body = <SearchScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
   else if(screen==="reports") body = <ReportsScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
   else body = <HomeScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} setCurrentUser={setCurrentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
@@ -2203,6 +2204,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
             {label:"Hours & Pay",icon:"⏱",screen:"hours",color:C.green},
             {label:"Search",icon:"🔍",screen:"search",color:"#06B6D4"},
             ...(isManager?[
+              {label:"Crew Roster",icon:"👥",screen:"roster",color:C.purple},
               {label:"Reports",icon:"📊",screen:"reports",color:C.gold},
               {label:"Admin Panel",icon:"🎛️",screen:"admin",color:C.gold},
               {label:"Blast Message",icon:"📨",screen:"message",color:C.red},
@@ -4466,6 +4468,20 @@ function AdminShiftsTab({state,persist,updateShift,setScreen,setActiveShiftId,ac
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// Standalone roster page — reachable with zero shifts, unlike the Admin panel
+// (which is scoped to an active shift and refuses to open without one).
+function RosterScreen({state,persist,setScreen,setActiveShiftId}) {
+  return (
+    <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
+      <style>{GS}</style>
+      <PageHeader title="Crew Roster" sub="Your People" onBack={()=>setScreen("home")}/>
+      <div className="bcn-body" style={{paddingTop:"12px"}}>
+        <AdminRosterTab state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>
       </div>
     </div>
   );
