@@ -1662,14 +1662,17 @@ export default function App({ sessionUser = null }) {
 
   // Helper: update a single shift and auto-stamp lastUpdated.
   // Pass updater function (oldShift) => newShift or a plain shift object.
-  const updateShift = useCallback((shiftId, updater, updatedByName) => {
+  const updateShift = useCallback((shiftId, updater, updatedByName, extraNotifs) => {
     setState(prevState => {
       const newShifts = prevState.shifts.map(s => {
         if (s.id !== shiftId) return s;
         const updated = typeof updater === "function" ? updater(s) : { ...s, ...updater };
         return { ...updated, lastUpdated: now(), updatedBy: updatedByName || "" };
       });
-      const ns = { ...prevState, shifts: newShifts };
+      // extraNotifs ride in the same state update so the shift change and its
+      // notification can't get separated by a poll landing between two saves.
+      const ns = { ...prevState, shifts: newShifts,
+        notifications: extraNotifs?.length ? [...extraNotifs, ...prevState.notifications] : prevState.notifications };
       flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[]});
       return ns;
     });
@@ -2103,6 +2106,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
     .filter(n => {
       if(dismissed.has(n.id)) return false;
       if(n.to==="all") return true;                       // genuine all-hands broadcast
+      if(n.to==="managers") return currentUser.role==="manager"; // crew responses etc.
       if(n.to===currentUser.id) return true;              // addressed to me directly
       if(n.toIds && n.toIds.includes(currentUser.id)) return true; // scoped to a shift's crew
       return false;
@@ -2225,6 +2229,18 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
               <div>
                 <div style={{fontSize:"13px",fontWeight:"700",color:s.id===activeShift?.id?C.gold:C.text}}>{s.client}</div>
                 <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>{s.date} · {s.callTime} · {s.location}</div>
+                {isManager && s.crew?.length>0 && (()=>{
+                  const conf=s.crew.filter(c=>c.confirmed).length;
+                  const dec=s.crew.filter(c=>c.declined).length;
+                  const pend=s.crew.length-conf-dec;
+                  return (
+                    <div style={{fontSize:"10px",marginTop:"3px",display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                      <span style={{color:conf===s.crew.length?C.green:C.muted,fontWeight:conf===s.crew.length?"700":"400"}}>✓ {conf}/{s.crew.length} confirmed</span>
+                      {dec>0 && <span style={{color:C.red,fontWeight:"700"}}>✗ {dec} declined</span>}
+                      {pend>0 && <span style={{color:C.dim}}>{pend} pending</span>}
+                    </div>
+                  );
+                })()}
               </div>
               <span style={badge(s.status==="active"?"#1a1400":C.muted,s.status==="active"?"#E8C84A":C.s3)}>{s.status.toUpperCase()}</span>
             </div>
@@ -2346,7 +2362,12 @@ function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activ
       ...s,
       crew: s.crew.map(c => (c.rosterId===currentUser.id||c.id===currentUser.id)
         ? {...c, declined:true, declinedAt:now(), confirmed:false, confirmedAt:null} : c),
-    }), currentUser.name);
+    }), currentUser.name, [{
+      // Declines need a replacement found — tell the managers instead of
+      // waiting for one to open the shift and notice.
+      id:uid(), to:"managers", shiftId:activeShift.id, ts:now(),
+      text:`⚠️ ${currentUser.name} declined ${activeShift.client} · ${activeShift.date}`,
+    }]);
   }
   function toggleTask(tid) {
     const tasks = activeShift.tasks.map(t=>t.id===tid?{...t,done:!t.done}:t);
