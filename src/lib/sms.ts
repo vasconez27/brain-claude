@@ -1,12 +1,20 @@
 import twilio from "twilio";
 
-const client = twilio(
-  process.env.TWILIO_ACCOUNT_SID!,
-  process.env.TWILIO_AUTH_TOKEN!
-);
+// Constructed lazily: building the client at module load crashes the whole
+// route on import when Twilio env vars aren't configured yet.
+let _client: ReturnType<typeof twilio> | null = null;
+function getClient() {
+  if (!_client) {
+    _client = twilio(
+      process.env.TWILIO_ACCOUNT_SID!,
+      process.env.TWILIO_AUTH_TOKEN!
+    );
+  }
+  return _client;
+}
 
 export async function sendSMS(to: string, body: string): Promise<string> {
-  const msg = await client.messages.create({
+  const msg = await getClient().messages.create({
     body,
     from: process.env.TWILIO_PHONE_NUMBER!,
     to,

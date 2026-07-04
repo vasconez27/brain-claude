@@ -34,6 +34,19 @@ async function save(d) {
   return _saveChain;
 }
 
+// Fire-and-forget SMS ping through the server's Twilio route. Silently a
+// no-op when Twilio isn't configured or the request fails — in-app
+// notifications are the source of truth; SMS is just the wake-up tap.
+function sendSMSPing(phones, body) {
+  const clean = (phones || []).filter(Boolean);
+  if (!clean.length || !body) return;
+  fetch("/api/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phones: clean, body: body.slice(0, 1500) }),
+  }).catch(() => {});
+}
+
 // ─── THEME ───────────────────────────────────────────────────────────────────
 // Colors flow through CSS variables (set on <html> by applyTheme) so the whole
 // app can switch between light and dark at runtime.
@@ -3801,6 +3814,8 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
     });
     setPosted(true);
     setTimeout(()=>setPosted(false), 2500);
+    // Real SMS of the full brief to the included recipients (no-op without Twilio).
+    sendSMSPing(allPhones, messageText);
   }
 
   // Build recipient lists. Resolve contact info from the CURRENT roster (by
@@ -4828,6 +4843,8 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
       text:`🆕 New shift: ${newShift.client} · ${displayDate} · Call ${newShift.callTime} — open it to confirm.`,
     }, ...state.notifications] : state.notifications;
     persist({...state,shifts:newShifts,notifications:notifs});
+    sendSMSPing(crew.map(c=>c.phone),
+      `BigCrew: You're on ${newShift.client} · ${displayDate} · Call ${newShift.callTime}. Open the app to confirm.`);
     setActiveShiftId(newShift.id);
     setScreen("message");
   }
