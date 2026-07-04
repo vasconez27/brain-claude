@@ -3950,7 +3950,7 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
 
           {/* ── RIGHT: LIVE PREVIEW + SEND ── */}
           <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-            <div style={{...card({border:`1.5px solid ${C.gold}`,position:"sticky",top:"80px"})}}>
+            <div style={{...card({border:`1.5px solid ${C.gold}`})}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
                 <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",letterSpacing:"0.12em"}}>📨 LIVE PREVIEW</div>
                 <div style={{fontSize:"9px",color:C.muted}}>{messageText.length} chars</div>
