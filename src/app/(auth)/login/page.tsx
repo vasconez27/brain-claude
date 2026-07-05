@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { useState, useEffect } from "react";
+import { signIn, getProviders } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -15,6 +15,13 @@ export default function LoginPage() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Only offer Google when the provider is actually configured — otherwise
+  // the button dead-ends on NextAuth's error page.
+  const [hasGoogle, setHasGoogle] = useState(false);
+
+  useEffect(() => {
+    getProviders().then(p => setHasGoogle(Boolean(p?.google))).catch(() => {});
+  }, []);
 
   async function routeAfterLogin() {
     const res = await fetch("/api/auth/session");
@@ -69,20 +76,24 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Google */}
-          <button
-            onClick={() => signIn("google", { callbackUrl: "/post-login" })}
-            className="w-full flex items-center justify-center gap-3 py-2.5 border border-gray-300 dark:border-neutral-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors"
-          >
-            <GoogleIcon />
-            Continue with Google
-          </button>
+          {/* Google — hidden unless the provider is configured */}
+          {hasGoogle && (
+            <>
+              <button
+                onClick={() => signIn("google", { callbackUrl: "/post-login" })}
+                className="w-full flex items-center justify-center gap-3 py-2.5 border border-gray-300 dark:border-neutral-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-neutral-800 transition-colors"
+              >
+                <GoogleIcon />
+                Continue with Google
+              </button>
 
-          <div className="flex items-center gap-3 my-4">
-            <div className="flex-1 h-px bg-gray-200 dark:bg-neutral-700" />
-            <span className="text-xs text-gray-400">or</span>
-            <div className="flex-1 h-px bg-gray-200 dark:bg-neutral-700" />
-          </div>
+              <div className="flex items-center gap-3 my-4">
+                <div className="flex-1 h-px bg-gray-200 dark:bg-neutral-700" />
+                <span className="text-xs text-gray-400">or</span>
+                <div className="flex-1 h-px bg-gray-200 dark:bg-neutral-700" />
+              </div>
+            </>
+          )}
 
           {/* Tab switcher */}
           <div className="flex gap-1 p-1 bg-gray-100 dark:bg-neutral-800 rounded-lg mb-4">
