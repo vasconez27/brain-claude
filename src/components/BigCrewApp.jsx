@@ -608,6 +608,139 @@ function parseCalendarPaste(input) {
   return result;
 }
 
+// ─── SHIFT BRIEF PASTE PARSER ────────────────────────────────────────────────
+// Parses the group-text-style shift brief managers already write by hand:
+//   Date: / Call Time: / Location: / Client: / On site contact: / Uniform: /
+//   Tools & PPE: / Goals/Scope/Notes: / CREW (numbered list, sub-headed roles)
+// Labels may carry their value inline or on the following line(s). Crew names
+// are fuzzy-matched to the roster (exact → first+last-initial → unique first).
+function parseShiftBrief(text, roster) {
+  if (!text || !text.trim()) return null;
+  const rawLines = text.split(/\r?\n/).map(l => l.trim());
+
+  const LABELS = [
+    { key: "date",     re: /^date\s*:?\s*(.*)$/i },
+    { key: "callTime", re: /^call\s*time\s*:?\s*(.*)$/i },
+    { key: "location", re: /^(?:location|where|venue|address)\s*:?\s*(.*)$/i },
+    { key: "client",   re: /^client\s*:?\s*(.*)$/i },
+    { key: "poc",      re: /^(?:on\s*-?\s*site\s*contact|poc|contact|point\s*of\s*contact)\s*:?\s*(.*)$/i },
+    { key: "uniform",  re: /^(?:uniform|dress\s*code)\s*:?\s*(.*)$/i },
+    { key: "tools",    re: /^tools\s*(?:&|and|\/)?\s*(?:ppe)?\s*:?\s*(.*)$/i },
+    { key: "scope",    re: /^(?:goals?|scope|notes?)(?:\s*[\/&]\s*(?:goals?|scope|notes?))*\s*:?\s*(.*)$/i },
+    { key: "crew",     re: /^crew\b\s*:?\s*(.*)$/i },
+  ];
+  const matchLabel = (line) => {
+    for (const l of LABELS) { const m = line.match(l.re); if (m) return { key: l.key, inline: (m[1] || "").trim() }; }
+    return null;
+  };
+
+  const fields = {}; const scopeLines = []; const crewNames = []; const footer = [];
+  let section = null;   // which multi-line field we're inside
+  let crewTag = null;   // current sub-heading role tag inside CREW ("Fork ops")
+
+  for (const line of rawLines) {
+    if (!line) { continue; }
+    const label = matchLabel(line);
+    if (label) {
+      section = label.key; crewTag = null;
+      if (label.inline) {
+        if (section === "scope") scopeLines.push(label.inline);
+        else if (section !== "crew") { fields[section] = label.inline; section = null; }
+      }
+      continue;
+    }
+    if (section === "crew") {
+      const numbered = line.match(/^\d+\s*[\.\)\-]?\s*(.+)$/);
+      if (numbered) {
+        let name = numbered[1].trim();
+        let tag = crewTag;
+        const cc = name.match(/\((CC|LEAD|CAPTAIN)\)/i);
+        if (cc) { tag = "CC"; name = name.replace(/\s*\((CC|LEAD|CAPTAIN)\)\s*/i, " ").trim(); }
+        if (name) crewNames.push({ name, roleTag: tag });
+      } else if (/^please|^professionalism|^lateness|^thank/i.test(line)) {
+        section = "footer"; footer.push(line);
+      } else if (line.length < 40) {
+        crewTag = line.replace(/:$/, "").trim(); // sub-heading like "Fork ops"
+      }
+      continue;
+    }
+    if (section === "footer") { footer.push(line); continue; }
+    if (section === "scope") { scopeLines.push(line); continue; }
+    if (section && !fields[section]) { fields[section] = line; section = null; continue; }
+    // Unclaimed text before any label ("PLEASE CONFIRM!") or between sections
+    if (/^please|^professionalism|^lateness|^thank/i.test(line)) footer.push(line);
+  }
+
+  // Date "06/28/26" → input format YYYY-MM-DD
+  let date = "";
+  const dm = (fields.date || "").match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+  if (dm) {
+    const y = dm[3].length === 2 ? "20" + dm[3] : dm[3];
+    date = `${y}-${dm[1].padStart(2, "0")}-${dm[2].padStart(2, "0")}`;
+  }
+
+  // "11pm - 8am" → "11:00 PM" / "8:00 AM" (TimeInput display format)
+  const parseOneTime = (s) => {
+    const m = (s || "").match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+    if (!m) return "";
+    let h = parseInt(m[1]); const mn = m[2] || "00";
+    let ap = (m[3] || "").toUpperCase();
+    if (!ap) ap = h >= 12 ? "PM" : "AM";
+    if (h > 12) { h -= 12; ap = "PM"; }
+    if (h === 0) { h = 12; ap = "AM"; }
+    return `${h}:${mn} ${ap}`;
+  };
+  const timeParts = (fields.callTime || "").split(/\s*(?:-|–|—|to)\s*/i);
+  const callTime = parseOneTime(timeParts[0]);
+  const endTime = timeParts[1] ? parseOneTime(timeParts[1]) : "";
+
+  // Fuzzy roster match: exact → first name + last initial → unique first name
+  const active = (roster || []).filter(r => r.active !== false);
+  const matchRoster = (name) => {
+    const n = name.toLowerCase().replace(/\s+/g, " ").trim();
+    let m = active.find(r => r.name.toLowerCase().trim() === n);
+    if (m) return m;
+    const parts = n.split(" ");
+    const first = parts[0]; const lastInit = parts.length > 1 ? parts[parts.length - 1][0] : null;
+    if (lastInit) {
+      m = active.find(r => {
+        const rp = r.name.toLowerCase().split(/\s+/);
+        return rp[0] === first && rp.length > 1 && rp[rp.length - 1][0] === lastInit;
+      });
+      if (m) return m;
+    }
+    const firsts = active.filter(r => r.name.toLowerCase().split(/\s+/)[0] === first);
+    return firsts.length === 1 ? firsts[0] : null;
+  };
+
+  const matched = []; const unmatched = [];
+  crewNames.forEach(c => {
+    const r = matchRoster(c.name);
+    if (r && !matched.find(x => x.rosterId === r.id)) matched.push({ rosterId: r.id, roleTag: c.roleTag, name: r.name, phone: r.phone || "" });
+    else if (!r) unmatched.push(c);
+  });
+
+  const notes = [
+    fields.tools ? `Tools & PPE: ${fields.tools}` : null,
+    footer.length ? footer.join(" ") : null,
+  ].filter(Boolean).join("\n");
+
+  const address = (fields.location || "").match(/\d{5}|\d+\s+\w+/) ? fields.location : "";
+  return {
+    form: {
+      client: fields.client || "",
+      date, callTime, endTime,
+      location: (fields.location || "").split(",")[0].trim(),
+      address,
+      poc: fields.poc || "",
+      uniform: fields.uniform || "",
+      notes,
+    },
+    scope: scopeLines,
+    matched, unmatched,
+  };
+}
+
 // ─── AVAILABILITY TEXT PARSER ────────────────────────────────────────────────
 // Parses messages like:
 //   "Available tomorrow 8am - 5pm"
@@ -4766,6 +4899,41 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
   const [calPaste, setCalPaste] = useState("");
   const [calParsed, setCalParsed] = useState(null);
   const [showCalPaste, setShowCalPaste] = useState(false);
+  const [briefPaste, setBriefPaste] = useState("");
+  const [briefResult, setBriefResult] = useState(null); // {filled:[], matched:[], unmatched:[]}
+  const [showBriefPaste, setShowBriefPaste] = useState(true);
+
+  // Paste & Autofill: parse the group-text-style brief, fill the form, and
+  // auto-select every crew name that matches the roster.
+  function autofillFromBrief() {
+    const parsed = parseShiftBrief(briefPaste, state.roster);
+    if (!parsed) return;
+    const filled = [];
+    setForm(f => {
+      const next = { ...f };
+      Object.entries(parsed.form).forEach(([k, v]) => { if (v) { next[k] = v; filled.push(k); } });
+      return next;
+    });
+    if (parsed.scope.length) setScopeLines(parsed.scope);
+    if (parsed.matched.length) {
+      setSelectedCrew(prev => {
+        const merged = [...prev];
+        parsed.matched.forEach(m => {
+          if (!merged.find(s => s.rosterId === m.rosterId)) merged.push({ rosterId: m.rosterId, roleTag: m.roleTag || null });
+        });
+        return merged;
+      });
+    }
+    setBriefResult({ filled, matched: parsed.matched, unmatched: parsed.unmatched });
+  }
+
+  // Unmatched pasted name → create a roster entry on the spot and select it.
+  function addUnmatchedToRoster(u) {
+    const member = { id: uid(), name: u.name, role: "Crew", position: "Crew", phone: "", email: "", pin: "", available: true, active: true, notes: "", tags: [] };
+    persist({ ...state, roster: [...state.roster, member] });
+    setSelectedCrew(prev => [...prev, { rosterId: member.id, roleTag: u.roleTag || null }]);
+    setBriefResult(r => r ? { ...r, matched: [...r.matched, { rosterId: member.id, roleTag: u.roleTag, name: u.name, phone: "" }], unmatched: r.unmatched.filter(x => x !== u) } : r);
+  }
 
   function tryParseCalendar() {
     const parsed = parseCalendarPaste(calPaste);
@@ -4861,6 +5029,63 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
       <PageHeader title="New Shift" sub="Create Shift" onBack={()=>setScreen("home")}/>
 
       <div className="bcn-body" style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+        {/* PASTE & AUTOFILL — the group-text brief managers already write */}
+        <div style={{...card({border:"1.5px dashed #E8C84A",background:C.goldBg})}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}
+            onClick={()=>setShowBriefPaste(v=>!v)}>
+            <div>
+              <div style={{fontSize:"12px",color:C.text,fontWeight:"700",letterSpacing:"0.08em"}}>📋 PASTE & AUTOFILL</div>
+              <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>Paste your usual crew text — details and crew fill in automatically</div>
+            </div>
+            <span style={{fontSize:"16px",color:C.text,transform:showBriefPaste?"rotate(180deg)":"rotate(0)",transition:"transform 0.2s"}}>▼</span>
+          </div>
+          {showBriefPaste && (
+            <div style={{marginTop:"12px",paddingTop:"12px",borderTop:`1px solid ${C.border}`}}>
+              <textarea value={briefPaste} onChange={e=>setBriefPaste(e.target.value)}
+                placeholder={"Paste the shift text you'd normally send, e.g.:\n\nPLEASE CONFIRM!\nDate: 06/28/26\nCall Time: 11pm - 8am\nLocation: Bryant Park New York, NY 10018\nClient: Blue Revolver\nOn site contact:\n Monty\nUniform:\n Big Crew T-shirt black pants\nCREW\n1. Richard B (CC)\n2. Bryan V\nFork ops\n1. Jason Lake"}
+                style={{...inp,minHeight:"120px",fontSize:"11px",fontFamily:"monospace",resize:"vertical"}}/>
+              <div style={{display:"flex",gap:"8px",marginTop:"8px"}}>
+                <button onClick={autofillFromBrief} disabled={!briefPaste.trim()} style={{...btn("gold",true),flex:1,opacity:briefPaste.trim()?1:0.4}}>⚡ AUTOFILL</button>
+                <button onClick={()=>{setBriefPaste("");setBriefResult(null);}} style={{...btn("ghost"),padding:"10px 14px",border:`1px solid ${C.border}`}}>✕</button>
+              </div>
+
+              {briefResult && (
+                <div style={{marginTop:"12px",padding:"12px",background:C.s2,borderRadius:"8px",border:`1px solid ${briefResult.unmatched.length?C.gold:C.green}`}}>
+                  <div style={{fontSize:"10px",color:C.green,letterSpacing:"0.1em",fontWeight:"700",marginBottom:"6px"}}>
+                    ✓ FILLED {briefResult.filled.length} FIELDS — REVIEW THE FORM BELOW, THEN CREATE
+                  </div>
+                  {briefResult.matched.length>0 && (
+                    <div style={{marginTop:"6px"}}>
+                      <div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.08em",marginBottom:"4px"}}>CREW MATCHED TO ROSTER</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>
+                        {briefResult.matched.map(m=>(
+                          <span key={m.rosterId} style={{...badge(C.green,C.greenBg),fontSize:"10px"}}>
+                            ✓ {m.name}{m.roleTag?` · ${m.roleTag}`:""}{m.phone?` · ${m.phone}`:""}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {briefResult.unmatched.length>0 && (
+                    <div style={{marginTop:"10px"}}>
+                      <div style={{fontSize:"9px",color:C.red,letterSpacing:"0.08em",marginBottom:"4px"}}>NOT ON ROSTER — TAP TO ADD</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
+                        {briefResult.unmatched.map((u,i)=>(
+                          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",background:C.redBg,borderRadius:"6px"}}>
+                            <span style={{fontSize:"11px",color:C.text}}>{u.name}{u.roleTag?` (${u.roleTag})`:""}</span>
+                            <button onClick={()=>addUnmatchedToRoster(u)} style={{...btn("gold"),padding:"4px 10px",fontSize:"10px"}}>+ ADD & INCLUDE</button>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{fontSize:"9px",color:C.dim,marginTop:"5px"}}>Added members have no phone number yet — fill it in from the Crew Roster so SMS reaches them.</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* GOOGLE CALENDAR PASTE IMPORTER */}
         <div style={{...card({border:`1.5px dashed ${C.blue}`,background:C.blueBg})}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}
