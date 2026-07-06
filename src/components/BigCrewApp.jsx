@@ -1764,6 +1764,27 @@ export default function App({ sessionUser = null }) {
     }
   },[currentUser, sessionUser]);
 
+  // One-time scrub (manager only): permanently drop legacy to:"all" and
+  // untargeted notifications from the shared list, plus anything past 21 days.
+  // This heals the "everyone sees the old test notification" bug at the source.
+  const scrubbedRef = useRef(false);
+  useEffect(()=>{
+    if(scrubbedRef.current || !currentUser || currentUser.role!=="manager" || !loaded) return;
+    const cutoff = Date.now() - 21*24*3600000;
+    const clean = (state.notifications||[]).filter(n => {
+      if(n.ts && new Date(n.ts).getTime() < cutoff) return false; // too old
+      if(n.to==="all") return false;                              // legacy broadcast
+      // Keep only explicitly-targeted notifications.
+      return n.to==="managers" || (n.toIds && n.toIds.length>0) || (n.to && n.to!=="shift");
+    });
+    if(clean.length !== (state.notifications||[]).length){
+      scrubbedRef.current = true;
+      persist(prev => ({...prev, notifications: clean}));
+    } else {
+      scrubbedRef.current = true;
+    }
+  },[currentUser, loaded, state.notifications, persist]);
+
   // Auto-remind: a shift starting within 24h with crew who never answered
   // gets one nudge — in-app notification to the silent crew plus an SMS ping.
   // Runs on manager devices; the persisted reminderSentAt flag keeps it to
@@ -2248,14 +2269,20 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
     try { localStorage.setItem("bigcrew_dismissed_notifs", JSON.stringify([...next])); } catch {}
   }
 
+  // Notifications are STRICTLY individual: a user sees one only if explicitly
+  // targeted. The old `to:"all"` broadcast is gone — a single stale to:"all"
+  // record in the shared list was showing to every crew member. Also drop
+  // anything older than 21 days so ancient notifications don't haunt.
+  const NOTIF_MAX_AGE_MS = 21*24*3600000;
+  const nowTs = Date.now();
   const myNotifs = state.notifications
     .filter(n => {
       if(dismissed.has(n.id)) return false;
-      if(n.to==="all") return true;                       // genuine all-hands broadcast
+      if(n.ts && (nowTs - new Date(n.ts).getTime()) > NOTIF_MAX_AGE_MS) return false;
       if(n.to==="managers") return currentUser.role==="manager"; // crew responses etc.
       if(n.to===currentUser.id) return true;              // addressed to me directly
       if(n.toIds && n.toIds.includes(currentUser.id)) return true; // scoped to a shift's crew
-      return false;
+      return false; // to:"all" and untargeted notifications no longer broadcast
     })
     .slice(0, 3);
 
