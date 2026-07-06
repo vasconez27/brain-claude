@@ -1801,7 +1801,10 @@ export default function App({ sessionUser = null }) {
           });
         }
         setCurrentUser({ id:match.id, name:match.name, role:"crew", rosterId:match.id, accountId:su.id });
-      } else if((state.removedIdentities||[]).some(r => (su.id && r.userId===su.id) || (su.email && r.email && r.email.toLowerCase()===su.email.toLowerCase()))){
+      } else if((state.removedIdentities||[]).some(r =>
+          (su.id && (r.userId===su.id || (r.linkedUserIds||[]).includes(su.id))) ||
+          (su.email && r.email && r.email.toLowerCase()===su.email.toLowerCase()) ||
+          (su.name && r.name && r.name.toLowerCase()===su.name.toLowerCase()))){
         // Manager deleted this person from the roster — do NOT resurrect them
         // via self-registration. They can view nothing until re-added.
         setCurrentUser({ id: su.id || uid(), name: su.name || "Crew", role:"crew", accountId:su.id, removed:true });
@@ -4704,7 +4707,18 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
   }
   function deleteMember(id){
     if(!confirm("Permanently delete this crew member from the roster?")) return;
-    persist({...state,roster:state.roster.filter(r=>r.id!==id)});
+    const gone = state.roster.find(r=>r.id===id);
+    // Tombstone the deleted identity (account ids, email, name) — otherwise
+    // the person's next login self-registers them right back onto the roster.
+    const tombs = gone ? [
+      ...(state.removedIdentities||[]),
+      { userId: gone.userId || undefined,
+        linkedUserIds: gone.linkedUserIds || [],
+        email: gone.email || undefined,
+        name: gone.name || undefined,
+        ts: now() },
+    ] : (state.removedIdentities||[]);
+    persist({...state, roster:state.roster.filter(r=>r.id!==id), removedIdentities:tombs});
     setProfileId(null);
   }
 
