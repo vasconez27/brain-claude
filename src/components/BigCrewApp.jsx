@@ -1008,6 +1008,10 @@ const INIT = {
   removedIdentities: [],
   // Manager-added custom role tags beyond the defaults
   customRoleTags: [],
+  // Crew's own personal schedule entries (a second job, an appointment) so
+  // they can keep their week straight. Private to each crew member.
+  // { id, ownerId, title, date:"MM/DD/YYYY", callTime, endTime, location, notes }
+  personalEntries: [],
 };
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
@@ -1687,7 +1691,7 @@ export default function App({ sessionUser = null }) {
       // so what a user sees in-session matches what survives a reload.
       const ns = (raw.notifications||[]).length > 60
         ? { ...raw, notifications: raw.notifications.slice(0,60) } : raw;
-      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[]});
+      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[],personalEntries:ns.personalEntries||[]});
       return ns;
     });
   },[flush]);
@@ -1838,7 +1842,7 @@ export default function App({ sessionUser = null }) {
       // notification can't get separated by a poll landing between two saves.
       const ns = { ...prevState, shifts: newShifts,
         notifications: extraNotifs?.length ? [...extraNotifs, ...prevState.notifications] : prevState.notifications };
-      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[]});
+      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[],personalEntries:ns.personalEntries||[]});
       return ns;
     });
   },[flush]);
@@ -1871,7 +1875,7 @@ export default function App({ sessionUser = null }) {
   else if(effectiveScreen==="reports") body = <ReportsScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
   else body = <HomeScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} setCurrentUser={setCurrentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
 
-  return <>{body}<ThemeToggle theme={theme} setTheme={setTheme}/>{saveError && <SaveErrorBanner onRetry={()=>{ setSaveError(false); flush({roster:state.roster,shifts:state.shifts,notifications:state.notifications,availability:state.availability,expenses:state.expenses||[],customRoleTags:state.customRoleTags||[],removedIdentities:state.removedIdentities||[]}); }} onDismiss={()=>setSaveError(false)}/>}</>;
+  return <>{body}<ThemeToggle theme={theme} setTheme={setTheme}/>{saveError && <SaveErrorBanner onRetry={()=>{ setSaveError(false); flush({roster:state.roster,shifts:state.shifts,notifications:state.notifications,availability:state.availability,expenses:state.expenses||[],customRoleTags:state.customRoleTags||[],removedIdentities:state.removedIdentities||[],personalEntries:state.personalEntries||[]}); }} onDismiss={()=>setSaveError(false)}/>}</>;
 }
 
 // Shown when a write to the shared workspace fails, so a user never thinks an
@@ -2258,6 +2262,9 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
   const visibleShifts = isManager
     ? state.shifts
     : state.shifts.filter(s=>s.crew?.some(c=>c.rosterId===currentUser.id||c.id===currentUser.id));
+  // Crew's own personal (paste-to-schedule) entries.
+  const myPersonalEntries = isManager ? [] :
+    (state.personalEntries||[]).filter(pe=>pe.ownerId===currentUser.id||pe.ownerId===currentUser.accountId);
   const confirmed = activeShift?.crew.filter(c=>c.confirmed).length||0;
   const total = activeShift?.crew.length||0;
   const myCrewEntry = activeShift?.crew.find(c=>c.rosterId===currentUser.id||c.id===currentUser.id);
@@ -2422,18 +2429,75 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
               <span style={badge(s.status==="active"?"#1a1400":C.muted,s.status==="active"?"#E8C84A":C.s3)}>{(s.status||"active").toUpperCase()}</span>
             </div>
           ))}
-          {!isManager && visibleShifts.length===0 && (
+          {!isManager && visibleShifts.length===0 && myPersonalEntries.length===0 && (
             <div style={{...card({textAlign:"center",color:C.muted,fontSize:"12px",border:`1px dashed ${C.border}`,padding:"22px 14px"})}}>
               No shifts assigned to you yet.<br/>
               <span style={{fontSize:"11px",color:C.dim}}>They'll show up here once your manager adds you to one.</span>
             </div>
           )}
+          {/* Crew's own personal schedule entries (paste-to-schedule). */}
+          {!isManager && myPersonalEntries.map(pe=>(
+            <div key={pe.id} style={{...card({border:`1px dashed ${C.blue}`,display:"flex",justifyContent:"space-between",alignItems:"center"})}}>
+              <div>
+                <div style={{fontSize:"13px",fontWeight:"700",color:C.text}}>{pe.title||"Personal"}</div>
+                <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>{pe.date} · {pe.callTime||""}{pe.endTime?`–${pe.endTime}`:""}{pe.location?` · ${pe.location}`:""}</div>
+              </div>
+              <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                <span style={badge(C.blue,C.blueBg)}>PERSONAL</span>
+                <button onClick={()=>persist(prev=>({...prev,personalEntries:(prev.personalEntries||[]).filter(x=>x.id!==pe.id)}))}
+                  style={{...btn("ghost"),padding:"4px 8px",fontSize:"9px",border:`1px solid ${C.border}`,color:C.muted}}>✕</button>
+              </div>
+            </div>
+          ))}
           {isManager && (
             <button onClick={()=>setScreen("newshift")} style={{...card({background:"transparent",border:`1px dashed ${C.border}`,cursor:"pointer",textAlign:"center",color:C.muted,fontSize:"12px",fontFamily:C.font})}} >
               + Create New Shift
             </button>
           )}
+          {!isManager && (
+            <PersonalPasteBox currentUser={currentUser} state={state} persist={persist}/>
+          )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Crew paste-to-schedule: paste a shift text, it becomes a PRIVATE entry on
+// the crew member's own schedule (a second job, an appointment) — never a real
+// company shift, never visible to the manager or other crew.
+function PersonalPasteBox({currentUser, state, persist}) {
+  const [open,setOpen]=useState(false);
+  const [text,setText]=useState("");
+  function add(){
+    const parsed = parseShiftBrief(text, []); // reuse field/time parsing; no roster
+    if(!parsed){ return; }
+    const f = parsed.form;
+    const [y,m,d] = (f.date||"").split("-");
+    const displayDate = y ? `${m}/${d}/${y}` : (f.date||"");
+    const entry = {
+      id: uid(), ownerId: currentUser.id, title: f.client || "Personal",
+      date: displayDate, callTime: f.callTime||"", endTime: f.endTime||"",
+      location: f.location||"", notes: f.notes||"", ts: now(),
+    };
+    persist(prev=>({...prev, personalEntries:[...(prev.personalEntries||[]), entry]}));
+    setText(""); setOpen(false);
+  }
+  if(!open) return (
+    <button onClick={()=>setOpen(true)} style={{...card({background:"transparent",border:`1px dashed ${C.blue}`,cursor:"pointer",textAlign:"center",color:C.blue,fontSize:"12px",fontFamily:C.font})}}>
+      ＋ Add to my schedule (paste)
+    </button>
+  );
+  return (
+    <div style={{...card({border:`1px dashed ${C.blue}`})}}>
+      <span style={lbl}>📋 Paste a shift or appointment</span>
+      <div style={{fontSize:"10px",color:C.muted,marginTop:"3px",marginBottom:"8px"}}>Private to you — for keeping your own week straight. Not sent to your manager.</div>
+      <textarea value={text} onChange={e=>setText(e.target.value)}
+        placeholder={"Paste anything, e.g.:\nDate: 07/12/26\nCall Time: 9am - 5pm\nLocation: Pier 36\nClient: Side gig"}
+        style={{...inp,minHeight:"90px",fontSize:"11px",fontFamily:"monospace",resize:"vertical"}}/>
+      <div style={{display:"flex",gap:"6px",marginTop:"8px"}}>
+        <button onClick={add} disabled={!text.trim()} style={{...btn("blue",true),flex:1,opacity:text.trim()?1:0.5}}>＋ ADD TO MY SCHEDULE</button>
+        <button onClick={()=>{setText("");setOpen(false);}} style={{...btn("ghost"),padding:"10px 14px",border:`1px solid ${C.border}`}}>✕</button>
       </div>
     </div>
   );

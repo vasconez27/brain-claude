@@ -146,6 +146,13 @@ function mergeCrewWrite(server: Rec, client: Rec, ownIds: Set<string>, accountId
   const clientExp = Array.isArray(client.expenses) ? (client.expenses as Rec[]) : [];
   merged.expenses = [...serverExp.filter(e => !owns(e)), ...clientExp.filter(owns)];
 
+  // Personal schedule entries: same rule — a crew member may add/edit/delete
+  // only their OWN entries; everyone else's come from the server untouched.
+  const ownsPE = (e: Rec) => ownIds.has(e.ownerId as string) || e.ownerId === accountId;
+  const serverPE = Array.isArray(server.personalEntries) ? (server.personalEntries as Rec[]) : [];
+  const clientPE = Array.isArray(client.personalEntries) ? (client.personalEntries as Rec[]) : [];
+  merged.personalEntries = [...serverPE.filter(e => !ownsPE(e)), ...clientPE.filter(ownsPE)];
+
   // Notifications: additions only (confirm/decline raises manager alerts) —
   // a crew save can't erase existing ones. Newest first, same 60 cap.
   const serverNotifs = Array.isArray(server.notifications) ? (server.notifications as Rec[]) : [];
@@ -227,6 +234,13 @@ function mergeManagerWrite(server: Rec, client: Rec, baseMs: number): Rec {
   const clientExpIds = new Set(clientExp.map(e => e.id));
   const serverExpExtra = (Array.isArray(server.expenses) ? (server.expenses as Rec[]) : []).filter(e => !clientExpIds.has(e.id));
   merged.expenses = [...clientExp, ...serverExpExtra];
+
+  // Personal entries: union by id — never drop a crew member's personal
+  // schedule items (a manager save shouldn't touch them).
+  const clientPE = Array.isArray(client.personalEntries) ? (client.personalEntries as Rec[]) : [];
+  const clientPEIds = new Set(clientPE.map(e => e.id));
+  const serverPEExtra = (Array.isArray(server.personalEntries) ? (server.personalEntries as Rec[]) : []).filter(e => !clientPEIds.has(e.id));
+  merged.personalEntries = [...clientPE, ...serverPEExtra];
 
   return merged;
 }
