@@ -4060,9 +4060,8 @@ function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId,cur
   const extraPhones = extraRecipients.filter(r=>r.phone).map(r=>r.phone);
   const allPhones = [...crewPhones, ...extraPhones];
 
-  // Mailto / SMS
+  // Mailto (bulk email is fine; SMS is per-person only — group threads are unreliable).
   const mailto = `mailto:${allEmails.join(",")}?subject=${encodeURIComponent(`BigCrew NYC – ${form.client} Shift ${form.date}`)}&body=${encodeURIComponent(messageText)}`;
-  const smsHref = `sms:${allPhones.join(",")}?&body=${encodeURIComponent(messageText)}`;
 
   // Available crew NOT included (so manager can add them back)
   const availableToAdd = (activeShift.crew||[]).filter(c=>!includedCrew.includes(c.id));
@@ -4236,15 +4235,12 @@ function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId,cur
                 <button onClick={copyMsg} style={{...btn(copied?"green":"gold",true),padding:"12px"}}>
                   {copied ? "✓ COPIED TO CLIPBOARD!" : "📋 COPY MESSAGE"}
                 </button>
-                <a href={smsHref} style={{...btn("green",true),padding:"12px",textDecoration:"none",textAlign:"center",display:"block"}}>
-                  💬 SMS GROUP {allPhones.length>0?`(${allPhones.length})`:""}
-                </a>
                 <a href={mailto} style={{...btn("blue",true),padding:"12px",textDecoration:"none",textAlign:"center",display:"block"}}>
                   📧 SEND VIA EMAIL {allEmails.length>0?`(${allEmails.length})`:""}
                 </a>
               </div>
               <div style={{fontSize:"9px",color:C.dim,marginTop:"8px",lineHeight:"1.5"}}>
-                <b style={{color:C.muted}}>Honest note:</b> "SMS Group" creates a group chat on most phones. To send <b>individually</b>, use the per-person links below.
+                Text crew <b style={{color:C.muted}}>individually</b> using the per-person links below — more reliable than a group thread.
               </div>
             </div>
 
