@@ -4844,6 +4844,8 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
   const [selectedCrew,setSelectedCrew]=useState([]);
   const [bulkEmails, setBulkEmails] = useState("");
   const [showBulkEmail, setShowBulkEmail] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickForm, setQuickForm] = useState({name:"",position:"",phone:"",email:""});
   const [briefPaste, setBriefPaste] = useState("");
   const [briefResult, setBriefResult] = useState(null); // {filled:[], matched:[], unmatched:[]}
   const [showBriefPaste, setShowBriefPaste] = useState(true);
@@ -4870,6 +4872,26 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
       });
     }
     setBriefResult({ filled, matched: parsed.matched, unmatched: parsed.unmatched });
+  }
+
+  // Rookie added on the spot: same shape as the Roster screen's add, saved to
+  // the roster AND selected for this shift in one action.
+  function quickAddCrew() {
+    const name = quickForm.name.trim();
+    if(!name) return;
+    // If they're already on the roster, just select them — no duplicate row.
+    const existing = state.roster.find(m => m.name.toLowerCase() === name.toLowerCase());
+    if(existing){
+      if(!selectedCrew.find(s=>s.rosterId===existing.id)) setSelectedCrew(prev=>[...prev,{rosterId:existing.id,roleTag:null}]);
+      setShowQuickAdd(false); setQuickForm({name:"",position:"",phone:"",email:""});
+      return;
+    }
+    const member = { id: uid(), name, role:"Crew", position: quickForm.position.trim()||"Crew",
+      phone: quickForm.phone.trim(), email: quickForm.email.trim(), pin:"",
+      available:true, active:true, notes:"", tags:[] };
+    persist({...state, roster:[...state.roster, member]});
+    setSelectedCrew(prev=>[...prev,{rosterId:member.id,roleTag:null}]);
+    setShowQuickAdd(false); setQuickForm({name:"",position:"",phone:"",email:""});
   }
 
   // Unmatched pasted name → create a roster entry on the spot and select it.
@@ -5073,13 +5095,45 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
         </div>
 
         <div style={card()}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px",gap:"6px",flexWrap:"wrap"}}>
             <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",letterSpacing:"0.12em"}}>ADD CREW ({selectedCrew.length})</div>
-            <button onClick={()=>setShowBulkEmail(!showBulkEmail)}
-              style={{...btn("ghost"),padding:"5px 10px",fontSize:"9px",border:`1px dashed ${C.border}`,color:C.muted}}>
-              {showBulkEmail?"✕ CLOSE":"📧 BULK PASTE (OPTIONAL)"}
-            </button>
+            <div style={{display:"flex",gap:"6px"}}>
+              <button onClick={()=>setShowQuickAdd(v=>!v)}
+                style={{...btn("ghost"),padding:"5px 10px",fontSize:"9px",border:`1px dashed ${showQuickAdd?C.gold:C.border}`,color:showQuickAdd?C.gold:C.muted}}>
+                {showQuickAdd?"✕ CLOSE":"➕ NEW PERSON"}
+              </button>
+              <button onClick={()=>setShowBulkEmail(!showBulkEmail)}
+                style={{...btn("ghost"),padding:"5px 10px",fontSize:"9px",border:`1px dashed ${C.border}`,color:C.muted}}>
+                {showBulkEmail?"✕ CLOSE":"📧 BULK PASTE"}
+              </button>
+            </div>
           </div>
+
+          {/* Quick-add a rookie who isn't on the roster yet — saves to the
+              roster (same shape as the Roster screen's add) AND selects them
+              for this shift in one tap. */}
+          {showQuickAdd && (
+            <div style={{...card({background:C.goldBg,border:`1px dashed ${C.gold}`,marginBottom:"10px"})}}>
+              <span style={lbl}>➕ New crew member — added to roster + this shift</span>
+              <div style={{display:"flex",flexDirection:"column",gap:"8px",marginTop:"8px"}}>
+                <input value={quickForm.name} onChange={e=>setQuickForm(f=>({...f,name:e.target.value}))} placeholder="Full name *" style={inp}/>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
+                  <input value={quickForm.position} onChange={e=>setQuickForm(f=>({...f,position:e.target.value}))} placeholder="Position (e.g. Stagehand)" style={inp}/>
+                  <input value={quickForm.phone} onChange={e=>setQuickForm(f=>({...f,phone:e.target.value}))} placeholder="Phone" inputMode="tel" style={inp}/>
+                </div>
+                <input value={quickForm.email} onChange={e=>setQuickForm(f=>({...f,email:e.target.value}))} placeholder="Email (optional)" inputMode="email" style={inp}/>
+                <div style={{display:"flex",gap:"6px"}}>
+                  <button onClick={quickAddCrew} disabled={!quickForm.name.trim()}
+                    style={{...btn("gold"),flex:1,opacity:quickForm.name.trim()?1:0.5}}>＋ ADD TO ROSTER & SHIFT</button>
+                  <button onClick={()=>{setShowQuickAdd(false);setQuickForm({name:"",position:"",phone:"",email:""});}}
+                    style={{...btn("ghost"),padding:"10px 14px",border:`1px solid ${C.border}`}}>CANCEL</button>
+                </div>
+                {!quickForm.phone.trim() && quickForm.name.trim() && (
+                  <div style={{fontSize:"9px",color:C.muted}}>No phone yet — SMS can't reach them until you add one (Roster → their profile).</div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Required positions + live fill */}
           <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px",padding:"10px 12px",background:C.s2,borderRadius:"8px"}}>
