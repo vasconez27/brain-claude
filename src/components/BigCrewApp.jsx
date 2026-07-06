@@ -1899,6 +1899,7 @@ function LoginScreen({state, setCurrentUser, setScreen}) {
     if(asManager) setCurrentUser({id:"manager",name:"Manager",role:"manager"});
     else {
       const m = state.roster[0];
+      if(!m) return; // empty roster — nothing to demo as
       setCurrentUser({id:m.id,name:m.name,role:"crew",rosterId:m.id});
     }
     setScreen("home");
@@ -3788,7 +3789,7 @@ function blastSnapshot(s) {
   };
 }
 
-function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId}) {
+function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId,currentUser}) {
   // Local form state initialized from active shift
   const [form, setForm] = useState({ ...blastSnapshot(activeShift), extraNotes:"", includeCalLink:true });
   // Mount-time snapshot: on save, only fields that differ from this are
@@ -3924,7 +3925,7 @@ function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId}) {
     initialFormRef.current = blastSnapshot(updated);
     // Post the full briefing onto the shift (crew see it under the shift's Updates)
     // AND drop a dashboard notification so every crew member is alerted in-app.
-    const ann = {id:uid(), text:messageText, ts:now(), from:"Management"};
+    const ann = {id:uid(), text:messageText, ts:now(), from:currentUser?.name||"Management"};
     // Only the crew assigned to this shift should be alerted about it.
     const notif = {
       id:uid(), to:"shift", toIds:(activeShift.crew||[]).map(c=>c.rosterId||c.id), shiftId:activeShift.id, ts:now(),
@@ -3949,7 +3950,7 @@ function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId}) {
   function postCustomNote() {
     const text = customMsg.trim();
     if(!text) return;
-    const ann = {id:uid(), text, ts:now(), from:"Management"};
+    const ann = {id:uid(), text, ts:now(), from:currentUser?.name||"Management"};
     const notif = {
       id:uid(), to:"shift", toIds:(activeShift.crew||[]).map(c=>c.rosterId||c.id), shiftId:activeShift.id, ts:now(),
       text: text.length > 120 ? text.slice(0,117)+"…" : text,
