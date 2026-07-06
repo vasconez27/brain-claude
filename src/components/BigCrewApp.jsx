@@ -553,8 +553,11 @@ function parseShiftBrief(text, roster) {
         if (name) crewNames.push({ name, roleTag: tag });
       } else if (/^please|^professionalism|^lateness|^thank/i.test(line)) {
         section = "footer"; footer.push(line);
-      } else if (line.length < 40) {
-        crewTag = line.replace(/:$/, "").trim(); // sub-heading like "Fork ops"
+      } else if (line.length <= 24 && line.split(/\s+/).length <= 3 && !/[.!?]$/.test(line)) {
+        // Sub-heading like "Fork ops" — short, few words, no sentence
+        // punctuation. Longer stray lines are ignored rather than becoming
+        // garbage role tags on the crew that follows.
+        crewTag = line.replace(/:$/, "").trim();
       }
       continue;
     }
@@ -611,7 +614,7 @@ function parseShiftBrief(text, roster) {
   crewNames.forEach(c => {
     const r = matchRoster(c.name);
     if (r && !matched.find(x => x.rosterId === r.id)) matched.push({ rosterId: r.id, roleTag: c.roleTag, name: r.name, phone: r.phone || "" });
-    else if (!r) unmatched.push(c);
+    else if (!r && !unmatched.find(x => x.name.toLowerCase() === c.name.toLowerCase())) unmatched.push(c);
   });
 
   const notes = [
