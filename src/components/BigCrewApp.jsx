@@ -1703,10 +1703,14 @@ export default function App({ sessionUser = null }) {
       const su = sessionUser;
       const roster = state.roster || [];
       const boundTo = (m) => m.userId === su.id || (m.linkedUserIds||[]).includes(su.id);
+      // Name is a NON-unique key: only fall back to it for an UNCLAIMED entry
+      // (no account bound). Matching a name already bound to a different
+      // account would hand one person another person's identity + expenses.
+      const unclaimed = (m) => !m.userId && !(m.linkedUserIds||[]).length;
       const match =
         (su.id && roster.find(m => boundTo(m) || m.id === su.id)) ||
         (su.email && roster.find(m => (m.email||"").toLowerCase() === su.email.toLowerCase())) ||
-        roster.find(m => (m.name||"").toLowerCase() === (su.name||"").toLowerCase());
+        roster.find(m => unclaimed(m) && (m.name||"").toLowerCase() === (su.name||"").toLowerCase());
       if(match){
         // Bind this account to the entry permanently. If the entry already
         // belongs to a DIFFERENT account (same person, second Google email),
@@ -1731,9 +1735,10 @@ export default function App({ sessionUser = null }) {
         }
         setCurrentUser({ id:match.id, name:match.name, role:"crew", rosterId:match.id, accountId:su.id });
       } else if((state.removedIdentities||[]).some(r =>
+          // Match tombstones ONLY on stable ids — matching on name would lock
+          // out a different, unrelated person who happens to share the name.
           (su.id && (r.userId===su.id || (r.linkedUserIds||[]).includes(su.id))) ||
-          (su.email && r.email && r.email.toLowerCase()===su.email.toLowerCase()) ||
-          (su.name && r.name && r.name.toLowerCase()===su.name.toLowerCase()))){
+          (su.email && r.email && r.email.toLowerCase()===su.email.toLowerCase()))){
         // Manager deleted this person from the roster — do NOT resurrect them
         // via self-registration. They can view nothing until re-added.
         setCurrentUser({ id: su.id || uid(), name: su.name || "Crew", role:"crew", accountId:su.id, removed:true });
@@ -3997,8 +4002,11 @@ function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId,cur
     const scopeNow = form.scope.filter(s=>s.trim());
     if(JSON.stringify(scopeNow) !== JSON.stringify((init.scope||[]).filter(s=>s.trim()))) dirty.scope = scopeNow;
     const updated = { ...activeShift, ...dirty };
-    // Next save's baseline is what we just wrote.
+    // Next save's baseline is what we just wrote — and resync the form to it,
+    // so a 2nd save doesn't diff against a moved baseline and re-clobber a
+    // field the manager never touched with its stale mount-time value.
     initialFormRef.current = blastSnapshot(updated);
+    setForm(f => ({ ...f, ...blastSnapshot(updated) }));
     // Post the full briefing onto the shift (crew see it under the shift's Updates)
     // AND drop a dashboard notification so every crew member is alerted in-app.
     const ann = {id:uid(), text:messageText, ts:now(), from:currentUser?.name||"Management"};

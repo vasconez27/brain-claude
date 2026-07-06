@@ -13,12 +13,13 @@ type Rec = Record<string, unknown>;
 function tombstoned(tombs: unknown, u: { id: string; name: string | null; email: string | null }): boolean {
   if (!Array.isArray(tombs)) return false;
   const emailLc = (u.email ?? "").toLowerCase();
-  const nameLc = (u.name ?? "").toLowerCase();
+  // Match ONLY on stable ids (account id, linked ids, email). Name is
+  // non-unique — matching it would exclude a different person who shares a
+  // deleted person's name from the roster entirely.
   return tombs.some((t: Rec) =>
     t.userId === u.id ||
     (Array.isArray(t.linkedUserIds) && (t.linkedUserIds as string[]).includes(u.id)) ||
-    (emailLc && typeof t.email === "string" && t.email.toLowerCase() === emailLc) ||
-    (nameLc && typeof t.name === "string" && t.name.toLowerCase() === nameLc)
+    (emailLc && typeof t.email === "string" && t.email.toLowerCase() === emailLc)
   );
 }
 
