@@ -1663,7 +1663,10 @@ export default function App({ sessionUser = null }) {
       payload = { ...payload, notifications: payload.notifications.slice(0, 60) };
     }
     savingRef.current = true;
-    save(payload).then(r => {
+    // Send the version we last loaded so the server can three-way merge a
+    // concurrent manager's edits instead of clobbering them (last-write-wins).
+    const withBase = { ...payload, _baseUpdatedAt: lastServerUpdatedAtRef.current || null };
+    save(withBase).then(r => {
       if (r && r.ok) {
         if (r.updatedAt) lastServerUpdatedAtRef.current = r.updatedAt;
         setSaveError(false);

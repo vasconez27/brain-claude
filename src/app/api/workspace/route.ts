@@ -179,8 +179,60 @@ function mergeCrewWrite(server: Rec, client: Rec, ownIds: Set<string>, accountId
   return merged;
 }
 
-// PUT — save the shared dashboard state. Managers overwrite; crew saves are
-// merged server-side so a crew session can only touch its own slices.
+// Three-way merge for MANAGER writes so two managers editing different
+// shifts don't clobber each other. Uses the version the client last loaded
+// (baseMs) to tell a concurrent add (keep) from an intentional delete (drop).
+function mergeManagerWrite(server: Rec, client: Rec, baseMs: number): Rec {
+  const merged: Rec = { ...client };
+  const ts = (v: unknown) => {
+    const t = v ? new Date(v as string).getTime() : 0;
+    return isNaN(t) ? 0 : t;
+  };
+
+  // Shifts: union by id. In both → newer lastUpdated wins. Only on server →
+  // keep if it changed after the client's base (another manager added/edited
+  // it); drop if it's older than base (this client intentionally deleted it).
+  const clientShifts = Array.isArray(client.shifts) ? (client.shifts as Rec[]) : [];
+  const serverShifts = Array.isArray(server.shifts) ? (server.shifts as Rec[]) : [];
+  const clientById = new Map(clientShifts.map(s => [s.id, s]));
+  const out: Rec[] = clientShifts.map(cs => {
+    const ss = serverShifts.find(s => s.id === cs.id);
+    if (ss && ts(ss.lastUpdated) > ts(cs.lastUpdated)) return ss; // server is newer
+    return cs;
+  });
+  for (const ss of serverShifts) {
+    if (clientById.has(ss.id)) continue;
+    const changedAfterBase = ts(ss.lastUpdated) > baseMs || ts(ss.createdAt) > baseMs;
+    if (changedAfterBase) out.push(ss); // concurrent add/edit by another manager
+  }
+  merged.shifts = out;
+
+  // Notifications: union by id (never lose another manager's/crew's alerts),
+  // newest first, same 60 cap.
+  const known = new Set((Array.isArray(client.notifications) ? (client.notifications as Rec[]) : []).map(n => n.id));
+  const serverExtra = (Array.isArray(server.notifications) ? (server.notifications as Rec[]) : []).filter(n => !known.has(n.id));
+  merged.notifications = [...(Array.isArray(client.notifications) ? (client.notifications as Rec[]) : []), ...serverExtra]
+    .sort((a, b) => ts(b.ts) - ts(a.ts)).slice(0, 60);
+
+  // Roster: union by id — keep every server entry the client's payload lacks
+  // (a concurrent manager's roster addition, or an account-merged crew), so a
+  // stale save can't drop people. Client's version wins for entries in both.
+  const clientRoster = Array.isArray(client.roster) ? (client.roster as Rec[]) : [];
+  const clientRosterIds = new Set(clientRoster.map(r => r.id));
+  const serverRosterExtra = (Array.isArray(server.roster) ? (server.roster as Rec[]) : []).filter(r => !clientRosterIds.has(r.id));
+  merged.roster = [...clientRoster, ...serverRosterExtra];
+
+  // Expenses: union by id — never drop another user's expense entries.
+  const clientExp = Array.isArray(client.expenses) ? (client.expenses as Rec[]) : [];
+  const clientExpIds = new Set(clientExp.map(e => e.id));
+  const serverExpExtra = (Array.isArray(server.expenses) ? (server.expenses as Rec[]) : []).filter(e => !clientExpIds.has(e.id));
+  merged.expenses = [...clientExp, ...serverExpExtra];
+
+  return merged;
+}
+
+// PUT — save the shared dashboard state. Manager writes three-way merge with
+// concurrent edits; crew saves merge server-side to their own slices only.
 export async function PUT(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -195,11 +247,20 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Body must be an object" }, { status: 400 });
   }
 
-  let toSave = data as Rec;
+  const client = data as Rec;
+  // Pull out the client's base version (what it last loaded), then drop the
+  // marker so it never gets persisted into the document.
+  const baseMs = client._baseUpdatedAt ? new Date(client._baseUpdatedAt as string).getTime() : 0;
+  delete client._baseUpdatedAt;
+
+  let toSave = client;
+
+  // Read current server state whenever we might need to merge.
+  const needsMerge = true;
+  const ws0 = needsMerge ? await prisma.workspace.findUnique({ where: { id: WORKSPACE_ID } }) : null;
+  const server: Rec = (ws0?.data as Rec) ?? {};
 
   if (session.user.role !== "MANAGER") {
-    const ws = await prisma.workspace.findUnique({ where: { id: WORKSPACE_ID } });
-    const server: Rec = (ws?.data as Rec) ?? {};
     const emailLc = (session.user.email ?? "").toLowerCase();
     const ownIds = new Set<string>();
     for (const r of (Array.isArray(server.roster) ? (server.roster as Rec[]) : [])) {
@@ -210,7 +271,10 @@ export async function PUT(req: Request) {
       }
     }
     ownIds.add(session.user.id);
-    toSave = mergeCrewWrite(server, data as Rec, ownIds, session.user.id);
+    toSave = mergeCrewWrite(server, client, ownIds, session.user.id);
+  } else {
+    // Manager: three-way merge so a concurrent manager's edits survive.
+    toSave = mergeManagerWrite(server, client, isNaN(baseMs) ? 0 : baseMs);
   }
 
   const ws = await prisma.workspace.upsert({
