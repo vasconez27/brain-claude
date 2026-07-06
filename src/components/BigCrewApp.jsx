@@ -1764,6 +1764,42 @@ export default function App({ sessionUser = null }) {
     }
   },[currentUser, sessionUser]);
 
+  // Auto-remind: a shift starting within 24h with crew who never answered
+  // gets one nudge — in-app notification to the silent crew plus an SMS ping.
+  // Runs on manager devices; the persisted reminderSentAt flag keeps it to
+  // one reminder per shift across devices and reloads.
+  useEffect(()=>{
+    if(!currentUser || currentUser.role!=="manager" || !loaded) return;
+    const nowMs = Date.now();
+    const due = state.shifts.filter(s => {
+      if(s.status!=="active" || s.reminderSentAt) return false;
+      const start = parseShiftStart(s.date, s.callTime);
+      if(!start) return false;
+      const dt = start.getTime() - nowMs;
+      return dt > 0 && dt <= 24*3600000 && (s.crew||[]).some(c=>!c.confirmed && !c.declined);
+    });
+    if(!due.length) return;
+    const newNotifs = due.map(s => ({
+      id: uid(), to:"shift",
+      toIds: (s.crew||[]).filter(c=>!c.confirmed && !c.declined).map(c=>c.rosterId||c.id),
+      shiftId: s.id, ts: now(),
+      text: `⏰ Reminder: ${s.client} · ${s.date} · Call ${s.callTime} — you haven't confirmed yet. Open the shift to respond.`,
+    }));
+    persist(prev => ({
+      ...prev,
+      shifts: prev.shifts.map(s => due.find(d=>d.id===s.id) ? {...s, reminderSentAt: now()} : s),
+      notifications: [...newNotifs, ...prev.notifications],
+    }));
+    due.forEach(s => {
+      const pendingPhones = (s.crew||[])
+        .filter(c=>!c.confirmed && !c.declined)
+        .map(c => (state.roster.find(m=>m.id===(c.rosterId||c.id))?.phone) || c.phone)
+        .filter(Boolean);
+      sendSMSPing(pendingPhones,
+        `BigCrew reminder: ${s.client} ${s.date}, call ${s.callTime} — please confirm in the app.`);
+    });
+  },[state.shifts, currentUser, loaded, persist, state.roster]);
+
   // Helper: update a single shift and auto-stamp lastUpdated.
   // Pass updater function (oldShift) => newShift or a plain shift object.
   const updateShift = useCallback((shiftId, updater, updatedByName, extraNotifs) => {
