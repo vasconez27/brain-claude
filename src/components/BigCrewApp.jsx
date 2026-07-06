@@ -1085,19 +1085,37 @@ function SearchableNameDropdown({options, onSelect, placeholder="Type a name…"
 }
 
 // Time input that handles AM/PM display – internally 24-hour, displays 12-hour
-function TimeInput({value, onChange, placeholder="3:00 PM"}) {
-  // value is stored as "3:00 PM" format; <input type="time"> wants "HH:MM" 24-hour
+function TimeInput({value, onChange}) {
+  // value is stored as "3:00 PM" format. Three quick dropdowns instead of the
+  // native full clock: hour, minutes in 15-min steps, AM/PM.
+  const m = (value||"").match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  const hour = m ? String(parseInt(m[1])) : "";
+  const minute = m ? m[2] : "";
+  const ampm = m ? m[3].toUpperCase() : "";
+  const MINUTES = ["00","15","30","45"];
+  // A pasted brief can carry an off-interval minute (e.g. 7:20) — keep it
+  // selectable rather than silently snapping it.
+  const minuteOpts = minute && !MINUTES.includes(minute) ? [minute, ...MINUTES] : MINUTES;
+
+  const emit = (h, mn, ap) => {
+    if(!h) { onChange(""); return; }
+    onChange(`${h}:${mn||"00"} ${ap||"AM"}`);
+  };
+  const sel = {...inp, padding:"10px 6px", textAlign:"center", appearance:"auto", cursor:"pointer"};
+
   return (
-    <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
-      <input
-        type="time"
-        value={to24Hour(value)}
-        onChange={e=>onChange(from24Hour(e.target.value))}
-        style={{...inp,flex:1}}
-      />
-      <div style={{fontSize:"11px",color:C.muted,minWidth:"60px",textAlign:"right",fontWeight:"600"}}>
-        {value || placeholder}
-      </div>
+    <div style={{display:"flex",gap:"5px",alignItems:"center",marginTop:"4px"}}>
+      <select value={hour} onChange={e=>emit(e.target.value, minute, ampm)} style={{...sel,flex:1.2}} aria-label="hour">
+        <option value="">–</option>
+        {Array.from({length:12},(_,i)=>String(i+1)).map(h=><option key={h} value={h}>{h}</option>)}
+      </select>
+      <span style={{color:C.dim,fontWeight:"700"}}>:</span>
+      <select value={minute||"00"} onChange={e=>emit(hour||"12", e.target.value, ampm)} style={{...sel,flex:1.2}} disabled={!hour} aria-label="minutes">
+        {minuteOpts.map(mn=><option key={mn} value={mn}>{mn}</option>)}
+      </select>
+      <select value={ampm||"AM"} onChange={e=>emit(hour||"12", minute, e.target.value)} style={{...sel,flex:1.1}} disabled={!hour} aria-label="AM or PM">
+        <option>AM</option><option>PM</option>
+      </select>
     </div>
   );
 }
