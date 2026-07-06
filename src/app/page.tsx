@@ -43,11 +43,11 @@ export default function Home() {
         .bc-stage { transition: opacity 0.4s ease, transform 0.6s cubic-bezier(0.6,0,0.2,1); }
         .bc-stage.leaving { opacity: 0; transform: scale(1.18); }
 
-        /* black iris expanding from the logo center */
+        /* brand-red iris expanding from the logo center */
         .bc-iris {
           position: fixed; left: 50%; top: 50%;
           width: 14px; height: 14px; border-radius: 50%;
-          background: #080808;
+          background: #ce2c1f; /* matches the B. mark's background exactly */
           transform: translate(-50%, -50%) scale(0);
           z-index: 998; pointer-events: none;
         }
@@ -70,12 +70,12 @@ export default function Home() {
           100% { opacity: 1; transform: scale(1.05); }
         }
         .bc-bridge img {
-          width: 200px; height: 200px; object-fit: contain;
-          filter: invert(1);            /* white-bg/black-logo -> black-bg/white-logo */
+          width: 220px; height: 220px; object-fit: contain;
+          /* the mark's own red background blends into the iris — no filter */
         }
         .bc-dots { display: flex; gap: 7px; margin-top: 30px; }
         .bc-dots span {
-          width: 7px; height: 7px; border-radius: 50%; background: #fff;
+          width: 7px; height: 7px; border-radius: 50%; background: #0a0a0a;
           animation: bcPulse 1s infinite ease-in-out;
         }
         .bc-dots span:nth-child(2) { animation-delay: 0.15s; }
@@ -132,7 +132,7 @@ export default function Home() {
         <div className={`bc-iris ${leaving ? "go" : ""}`} />
         <div className={`bc-bridge ${leaving ? "go" : ""}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/bigcrewlogo.png" alt="" />
+          <img src="/b-brand.webp" alt="" />
           <div className="bc-dots"><span /><span /><span /></div>
         </div>
       </main>
