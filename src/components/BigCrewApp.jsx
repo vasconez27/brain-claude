@@ -1776,7 +1776,7 @@ export default function App({ sessionUser = null }) {
   else if(screen==="hours") body = <HoursScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift}/>;
   else if(screen==="expenses") body = <ExpenseScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser}/>;
   else if(screen==="newshift") body = <NewShiftScreen state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>;
-  else if(screen==="message") body = <MessageScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} activeShift={activeShift} currentUser={currentUser}/>;
+  else if(screen==="message") body = <MessageScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} activeShift={state.shifts.find(s=>s.id===activeShiftId)||null} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>;
   else if(screen==="shift") body = <ShiftScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift}/>;
   else if(screen==="admin") body = <AdminScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
   else if(screen==="roster") body = <RosterScreen state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
@@ -3755,27 +3755,39 @@ function NoShiftEmptyState({title, setScreen}) {
   );
 }
 
-function MessageScreen({state,persist,setScreen,activeShift}) {
+// Snapshot of the shift fields the blast form can edit — used both to seed the
+// form and to detect which fields the manager actually changed (dirty check).
+function blastSnapshot(s) {
+  return {
+    notes: s?.notes || "", date: s?.date || "", callTime: s?.callTime || "",
+    endTime: s?.endTime || "", client: s?.client || "", location: s?.location || "",
+    address: s?.address || "", poc: s?.poc || "", pocPhone: s?.pocPhone || "",
+    uniform: s?.uniform || "", scope: [...(s?.scope || [])],
+  };
+}
+
+function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId}) {
   // Local form state initialized from active shift
-  const [form, setForm] = useState({
-    notes: activeShift?.notes || "",
-    date: activeShift?.date || "",
-    callTime: activeShift?.callTime || "",
-    endTime: activeShift?.endTime || "",
-    client: activeShift?.client || "",
-    location: activeShift?.location || "",
-    address: activeShift?.address || "",
-    poc: activeShift?.poc || "",
-    pocPhone: activeShift?.pocPhone || "",
-    uniform: activeShift?.uniform || "",
-    scope: [...(activeShift?.scope || [])],
-    extraNotes: "",
-    includeCalLink: true,
-  });
+  const [form, setForm] = useState({ ...blastSnapshot(activeShift), extraNotes:"", includeCalLink:true });
+  // Mount-time snapshot: on save, only fields that differ from this are
+  // written back — so an untouched form can't clobber edits made elsewhere
+  // (another manager, another device) while this screen was open.
+  const initialFormRef = useRef(blastSnapshot(activeShift));
+  const shiftIdRef = useRef(activeShift?.id);
   // Which crew to include in this message
   const [includedCrew, setIncludedCrew] = useState(
     (activeShift?.crew || []).map(c=>c.id)
   );
+  // Re-seed everything when the manager picks a different shift (or picks one
+  // after arriving here with none selected).
+  useEffect(()=>{
+    if(activeShift && activeShift.id !== shiftIdRef.current){
+      shiftIdRef.current = activeShift.id;
+      initialFormRef.current = blastSnapshot(activeShift);
+      setForm({ ...blastSnapshot(activeShift), extraNotes:"", includeCalLink:true });
+      setIncludedCrew((activeShift.crew||[]).map(c=>c.id));
+    }
+  },[activeShift]);
   // Extra recipients (not yet on roster)
   const [extraRecipients, setExtraRecipients] = useState([]);
   const [newRecipient, setNewRecipient] = useState({name:"",email:"",phone:""});
@@ -3787,7 +3799,29 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
   const [customMsg, setCustomMsg] = useState("");
   const [posted, setPosted] = useState(false);
 
-  if(!activeShift) return <NoShiftEmptyState title="Blast Message" setScreen={setScreen}/>;
+  if(!activeShift && state.shifts.length===0) return <NoShiftEmptyState title="Blast Message" setScreen={setScreen}/>;
+  if(!activeShift) return (
+    // Shifts exist but none was explicitly selected — make the manager pick
+    // instead of silently defaulting to the first shift in the system (which
+    // made it possible to edit and save onto the wrong shift).
+    <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.font,color:C.text}}>
+      <style>{GS}</style>
+      <PageHeader title="Blast Message" sub="Pick the shift to message about" onBack={()=>setScreen("home")}/>
+      <div className="bcn-body" style={{paddingTop:"12px",display:"flex",flexDirection:"column",gap:"8px"}}>
+        <span style={lbl}>Which shift?</span>
+        {state.shifts.map(s=>(
+          <div key={s.id} onClick={()=>setActiveShiftId(s.id)}
+            style={{...card({cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"})}}>
+            <div>
+              <div style={{fontSize:"13px",fontWeight:"700"}}>{s.client}</div>
+              <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>{s.date} · {s.callTime} · {s.crew?.length||0} crew</div>
+            </div>
+            <span style={{color:C.gold,fontSize:"16px"}}>→</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   // Update a scope line
   function updateScope(i, val) {
@@ -3853,20 +3887,19 @@ function MessageScreen({state,persist,setScreen,activeShift}) {
 
   // Save changes back to the shift
   function saveToShift() {
-    const updated = {
-      ...activeShift,
-      notes: form.notes,
-      date: form.date,
-      callTime: form.callTime,
-      endTime: form.endTime,
-      client: form.client,
-      location: form.location,
-      address: form.address,
-      poc: form.poc,
-      pocPhone: form.pocPhone,
-      uniform: form.uniform,
-      scope: form.scope.filter(s=>s.trim()),
-    };
+    // Write back ONLY the fields the manager actually changed on this screen.
+    // A stale untouched form must not revert edits that landed on the shift
+    // (from another manager or device) while the blast screen was open.
+    const init = initialFormRef.current || {};
+    const dirty = {};
+    ["notes","date","callTime","endTime","client","location","address","poc","pocPhone","uniform"].forEach(k=>{
+      if(form[k] !== init[k]) dirty[k] = form[k];
+    });
+    const scopeNow = form.scope.filter(s=>s.trim());
+    if(JSON.stringify(scopeNow) !== JSON.stringify((init.scope||[]).filter(s=>s.trim()))) dirty.scope = scopeNow;
+    const updated = { ...activeShift, ...dirty };
+    // Next save's baseline is what we just wrote.
+    initialFormRef.current = blastSnapshot(updated);
     // Post the full briefing onto the shift (crew see it under the shift's Updates)
     // AND drop a dashboard notification so every crew member is alerted in-app.
     const ann = {id:uid(), text:messageText, ts:now(), from:"Management"};
