@@ -501,112 +501,6 @@ function fmtHour12(h) {
 // ─── GOOGLE CALENDAR PASTE PARSER ────────────────────────────────────────────
 // Accepts either a Google Calendar URL (calendar.google.com/event?...) or raw event text
 // and returns a shift-form-compatible object.
-function parseCalendarPaste(input) {
-  if (!input || !input.trim()) return null;
-  const txt = input.trim();
-  const result = { client:"", date:"", callTime:"", endTime:"", location:"", address:"", poc:"", pocPhone:"", notes:"", scope:[] };
-
-  // Try URL first - Google Calendar event URL
-  if (/calendar\.google\.com|calendar\.app\.google/i.test(txt)) {
-    try {
-      const url = new URL(txt);
-      const params = url.searchParams;
-      const text = params.get("text") || params.get("title");
-      const dates = params.get("dates");
-      const details = params.get("details") || params.get("description");
-      const location = params.get("location");
-      if (text) result.client = text;
-      if (location) {
-        result.location = location.split(",")[0] || location;
-        result.address = location;
-      }
-      if (details) result.notes = details;
-      if (dates) {
-        // Format: 20260531T150000/20260601T000000  or  20260531T150000Z/...
-        const m = dates.match(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})\d{2}Z?\/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})\d{2}Z?/);
-        if (m) {
-          const [, y1,mo1,d1,h1,mn1,y2,mo2,d2,h2,mn2] = m;
-          result.date = `${y1}-${mo1}-${d1}`;
-          result.callTime = from24Hour(`${h1}:${mn1}`);
-          result.endTime = from24Hour(`${h2}:${mn2}`);
-        }
-      }
-      return result;
-    } catch(e) { /* fall through to text parsing */ }
-  }
-
-  // Text parsing — look for common patterns
-  // Date patterns: MM/DD/YYYY, MM-DD-YYYY, "Saturday, May 31, 2026", "May 31"
-  const dateMatch = txt.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (dateMatch) {
-    const [, m, d, y] = dateMatch;
-    result.date = `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
-  } else {
-    // Try "Month DD, YYYY"
-    const monthMatch = txt.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})(?:,?\s+(\d{4}))?/i);
-    if (monthMatch) {
-      const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
-      const mIdx = months[monthMatch[1].slice(0,3).toLowerCase()];
-      const d = parseInt(monthMatch[2]);
-      const y = monthMatch[3] ? parseInt(monthMatch[3]) : new Date().getFullYear();
-      if (mIdx !== undefined) {
-        result.date = `${y}-${String(mIdx+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-      }
-    }
-  }
-
-  // Time range: "3pm - 12am", "3:00 PM to 12:00 AM", "15:00-00:00"
-  const timeRange = txt.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|to|–|—|until|until)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
-  if (timeRange) {
-    const [, h1, m1, ap1, h2, m2, ap2] = timeRange;
-    const toDisp = (h, m, ap) => {
-      let hh = parseInt(h);
-      const mm = m || "00";
-      let suf = (ap || "").toUpperCase();
-      if (!suf) suf = hh >= 12 ? "PM" : "AM";
-      if (hh > 12) { hh -= 12; suf = "PM"; }
-      if (hh === 0) { hh = 12; suf = "AM"; }
-      return `${hh}:${mm} ${suf}`;
-    };
-    result.callTime = toDisp(h1, m1, ap1);
-    result.endTime = toDisp(h2, m2, ap2);
-  }
-
-  // Title — usually first non-empty line, before any date/time
-  const lines = txt.split("\n").map(l=>l.trim()).filter(Boolean);
-  if (lines.length > 0 && !result.client) {
-    // First line that's not just a date or time
-    for (const line of lines) {
-      if (!/^\d/.test(line) && line.length < 80) {
-        result.client = line;
-        break;
-      }
-    }
-  }
-
-  // Location: line containing "@" or following "Location:" or "Where:"
-  for (const line of lines) {
-    if (/^(location|where|venue|address):/i.test(line)) {
-      const v = line.replace(/^[^:]+:/, "").trim();
-      result.address = v;
-      result.location = v.split(",")[0];
-      break;
-    }
-    if (line.startsWith("@ ") || line.startsWith("@")) {
-      result.location = line.replace(/^@\s*/, "");
-      break;
-    }
-  }
-
-  // Notes — everything else
-  const skipPatterns = [/^\d/, /^(location|where|venue|address|when|date|time):/i];
-  const noteLines = lines.filter(l => l !== result.client && !skipPatterns.some(p => p.test(l)));
-  if (noteLines.length > 0 && !result.notes) {
-    result.notes = noteLines.join("\n");
-  }
-
-  return result;
-}
 
 // ─── SHIFT BRIEF PASTE PARSER ────────────────────────────────────────────────
 // Parses the group-text-style shift brief managers already write by hand:
@@ -4932,9 +4826,6 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
   const [selectedCrew,setSelectedCrew]=useState([]);
   const [bulkEmails, setBulkEmails] = useState("");
   const [showBulkEmail, setShowBulkEmail] = useState(false);
-  const [calPaste, setCalPaste] = useState("");
-  const [calParsed, setCalParsed] = useState(null);
-  const [showCalPaste, setShowCalPaste] = useState(false);
   const [briefPaste, setBriefPaste] = useState("");
   const [briefResult, setBriefResult] = useState(null); // {filled:[], matched:[], unmatched:[]}
   const [showBriefPaste, setShowBriefPaste] = useState(true);
@@ -4969,28 +4860,6 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
     persist({ ...state, roster: [...state.roster, member] });
     setSelectedCrew(prev => [...prev, { rosterId: member.id, roleTag: u.roleTag || null }]);
     setBriefResult(r => r ? { ...r, matched: [...r.matched, { rosterId: member.id, roleTag: u.roleTag, name: u.name, phone: "" }], unmatched: r.unmatched.filter(x => x !== u) } : r);
-  }
-
-  function tryParseCalendar() {
-    const parsed = parseCalendarPaste(calPaste);
-    if (parsed) setCalParsed(parsed);
-  }
-
-  function applyCalendarParse() {
-    if (!calParsed) return;
-    setForm(f => ({
-      ...f,
-      client: calParsed.client || f.client,
-      date: calParsed.date || f.date,
-      callTime: calParsed.callTime || f.callTime,
-      endTime: calParsed.endTime || f.endTime,
-      location: calParsed.location || f.location,
-      address: calParsed.address || f.address,
-      notes: calParsed.notes || f.notes,
-    }));
-    setCalPaste("");
-    setCalParsed(null);
-    setShowCalPaste(false);
   }
 
   function addCrew(rosterMember) {
@@ -5118,48 +4987,6 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
                   )}
                 </div>
               )}
-            </div>
-          )}
-        </div>
-
-        {/* GOOGLE CALENDAR PASTE IMPORTER */}
-        <div style={{...card({border:`1.5px dashed ${C.blue}`,background:C.blueBg})}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}
-            onClick={()=>setShowCalPaste(v=>!v)}>
-            <div>
-              <div style={{fontSize:"12px",color:C.blue,fontWeight:"700",letterSpacing:"0.08em"}}>📅 PASTE FROM CALENDAR</div>
-              <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>Import a Google Calendar URL or event text to auto-fill</div>
-            </div>
-            <span style={{fontSize:"16px",color:C.blue,transform:showCalPaste?"rotate(180deg)":"rotate(0)",transition:"transform 0.2s"}}>▼</span>
-          </div>
-          {showCalPaste && (
-            <div style={{marginTop:"12px",paddingTop:"12px",borderTop:`1px solid ${C.border}`}}>
-              <textarea value={calPaste} onChange={e=>setCalPaste(e.target.value)}
-                placeholder={"Paste a Google Calendar event URL OR raw text:\n\nOption 1 (URL):\nhttps://calendar.google.com/calendar/event?action=TEMPLATE&text=...\n\nOption 2 (text):\nOverland Setup\nMay 31, 2026  3:00 PM - 12:00 AM\n@ Spring Studios, 6 St Johns Ln NYC\nPlease don't be late, bring ID"}
-                style={{...inp,minHeight:"100px",fontSize:"11px",fontFamily:"monospace",resize:"vertical"}}/>
-              <div style={{display:"flex",gap:"8px",marginTop:"8px"}}>
-                <button onClick={tryParseCalendar} disabled={!calPaste.trim()} style={{...btn("blue",true),flex:1,opacity:calPaste.trim()?1:0.4}}>🔍 PARSE</button>
-                <button onClick={()=>{setCalPaste("");setCalParsed(null);}} style={{...btn("ghost"),padding:"10px 14px",border:`1px solid ${C.border}`}}>✕</button>
-              </div>
-
-              {calParsed && (
-                <div style={{marginTop:"12px",padding:"12px",background:C.s2,borderRadius:"8px",border:`1px solid ${C.green}`}}>
-                  <div style={{fontSize:"10px",color:C.green,letterSpacing:"0.1em",fontWeight:"700",marginBottom:"8px"}}>✓ PARSED — REVIEW BELOW</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:"4px",fontSize:"11px"}}>
-                    {calParsed.client && <div><b style={{color:C.muted}}>Title:</b> <span style={{color:C.text}}>{calParsed.client}</span></div>}
-                    {calParsed.date && <div><b style={{color:C.muted}}>Date:</b> <span style={{color:C.text}}>{calParsed.date}</span></div>}
-                    {calParsed.callTime && <div><b style={{color:C.muted}}>Call:</b> <span style={{color:C.text}}>{calParsed.callTime}</span></div>}
-                    {calParsed.endTime && <div><b style={{color:C.muted}}>End:</b> <span style={{color:C.text}}>{calParsed.endTime}</span></div>}
-                    {calParsed.location && <div><b style={{color:C.muted}}>Location:</b> <span style={{color:C.text}}>{calParsed.location}</span></div>}
-                    {calParsed.address && <div><b style={{color:C.muted}}>Address:</b> <span style={{color:C.text}}>{calParsed.address}</span></div>}
-                    {calParsed.notes && <div><b style={{color:C.muted}}>Notes:</b> <span style={{color:C.text}}>{calParsed.notes}</span></div>}
-                  </div>
-                  <button onClick={applyCalendarParse} style={{...btn("green",true),marginTop:"10px"}}>✓ APPLY TO FORM</button>
-                </div>
-              )}
-              <div style={{fontSize:"9px",color:C.dim,marginTop:"8px",lineHeight:"1.4"}}>
-                💡 Tip: On Google Calendar, click an event → "..." menu → "Publish event" to get a shareable URL. Or just copy-paste any event text.
-              </div>
             </div>
           )}
         </div>
