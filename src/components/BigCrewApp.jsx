@@ -3921,6 +3921,29 @@ function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId}) {
     sendSMSPing(allPhones, messageText);
   }
 
+  // Custom-note delivery: same pipeline as the structured blast — shift
+  // announcement + in-app notification + SMS ping — without touching any
+  // shift fields.
+  function postCustomNote() {
+    const text = customMsg.trim();
+    if(!text) return;
+    const ann = {id:uid(), text, ts:now(), from:"Management"};
+    const notif = {
+      id:uid(), to:"shift", toIds:(activeShift.crew||[]).map(c=>c.rosterId||c.id), shiftId:activeShift.id, ts:now(),
+      text: text.length > 120 ? text.slice(0,117)+"…" : text,
+    };
+    persist({
+      ...state,
+      shifts: state.shifts.map(s => s.id===activeShift.id
+        ? {...s, announcements:[ann, ...(s.announcements||[])], lastUpdated:now()}
+        : s),
+      notifications: [notif, ...state.notifications],
+    });
+    setPosted(true);
+    setTimeout(()=>setPosted(false), 2500);
+    sendSMSPing(allPhones, text);
+  }
+
   // Build recipient lists. Resolve contact info from the CURRENT roster (by
   // rosterId) so a number/email the manager updated after the shift was created
   // is used — falling back to the snapshot on the crew entry if not on roster.
@@ -3968,6 +3991,12 @@ function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId}) {
             <div style={{fontSize:"10px",color:C.muted,marginTop:"3px",marginBottom:"8px"}}>Free-form announcement — company update, schedule change, reminder. Goes to the recipients you select below.</div>
             <textarea value={customMsg} onChange={e=>setCustomMsg(e.target.value)} placeholder={"e.g. Team — call time for tomorrow moved up 30 min to 2:30 PM. Reply to confirm."}
               style={{...inp,minHeight:"120px",resize:"vertical"}}/>
+            {/* Custom notes previously had NO in-app/SMS delivery — only the
+                manual send links — so crew who rely on the app never saw them. */}
+            <button onClick={postCustomNote} disabled={!customMsg.trim()}
+              style={{...btn("green",true),padding:"12px",marginTop:"10px",opacity:customMsg.trim()?1:0.5}}>
+              {posted ? "✓ POSTED — CREW NOTIFIED" : "📢 POST & NOTIFY CREW"}
+            </button>
           </div>
         )}
 
