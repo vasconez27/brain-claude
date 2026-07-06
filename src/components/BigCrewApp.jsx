@@ -2838,10 +2838,13 @@ function CalendarScreen({state,persist,setScreen,currentUser,activeShift,setActi
     });
   }
 
-  // Get availability for a day
+  // Get availability for a day. Managers see the whole roster's; crew see
+  // only their own — coworkers' schedules are the manager's data.
   function getAvailability(d) {
     const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-    const entries = state.roster.map(m=>({name:m.name,status:(state.availability[m.id]||{})[dateStr]||null})).filter(e=>e.status);
+    const visible = isManager ? state.roster
+      : state.roster.filter(m => m.id===currentUser.id || m.userId===currentUser.id);
+    const entries = visible.map(m=>({name:m.name,status:(state.availability[m.id]||{})[dateStr]||null})).filter(e=>e.status);
     return entries;
   }
 
