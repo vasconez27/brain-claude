@@ -1667,9 +1667,20 @@ export default function App({ sessionUser = null }) {
     }).finally(() => { savingRef.current = false; });
   },[]);
 
-  const persist = useCallback((newState) => {
-    setState(newState);
-    flush({roster:newState.roster,shifts:newState.shifts,notifications:newState.notifications,availability:newState.availability,expenses:newState.expenses||[],customRoleTags:newState.customRoleTags||[],removedIdentities:newState.removedIdentities||[]});
+  // Accepts a full next-state object OR a functional updater (prev => next).
+  // Handlers that can fire twice before a re-render (rapid taps) must use the
+  // functional form so the second write builds on the first, not on a stale
+  // render snapshot.
+  const persist = useCallback((newStateOrFn) => {
+    setState(prev => {
+      const raw = typeof newStateOrFn === "function" ? newStateOrFn(prev) : newStateOrFn;
+      // Keep the in-memory notification list at the same cap the server uses,
+      // so what a user sees in-session matches what survives a reload.
+      const ns = (raw.notifications||[]).length > 60
+        ? { ...raw, notifications: raw.notifications.slice(0,60) } : raw;
+      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[]});
+      return ns;
+    });
   },[flush]);
 
   // Auto-login from the real NextAuth session — skips the demo's own login
@@ -4964,7 +4975,7 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
     const member = { id: uid(), name, role:"Crew", position: quickForm.position.trim()||"Crew",
       phone: quickForm.phone.trim(), email: quickForm.email.trim(), pin:"",
       available:true, active:true, notes:"", tags:[] };
-    persist({...state, roster:[...state.roster, member]});
+    persist(prev => ({...prev, roster:[...prev.roster, member]}));
     setSelectedCrew(prev=>[...prev,{rosterId:member.id,roleTag:null}]);
     setShowQuickAdd(false); setQuickForm({name:"",position:"",phone:"",email:""});
   }
@@ -4972,7 +4983,7 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
   // Unmatched pasted name → create a roster entry on the spot and select it.
   function addUnmatchedToRoster(u) {
     const member = { id: uid(), name: u.name, role: "Crew", position: "Crew", phone: "", email: "", pin: "", available: true, active: true, notes: "", tags: [] };
-    persist({ ...state, roster: [...state.roster, member] });
+    persist(prev => ({ ...prev, roster: [...prev.roster, member] }));
     setSelectedCrew(prev => [...prev, { rosterId: member.id, roleTag: u.roleTag || null }]);
     setBriefResult(r => r ? { ...r, matched: [...r.matched, { rosterId: member.id, roleTag: u.roleTag, name: u.name, phone: "" }], unmatched: r.unmatched.filter(x => x !== u) } : r);
   }
