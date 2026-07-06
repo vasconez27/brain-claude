@@ -1768,20 +1768,25 @@ export default function App({ sessionUser = null }) {
   if(sessionUser && !currentUser) return <Spinner/>;
 
   // Route → compute the active screen, then wrap with the theme toggle.
+  // Manager-only screens are hard-gated by role — nav buttons hide them from
+  // crew, but a stale screen value (e.g. logout mid-Admin on a shared phone)
+  // must not render them either.
+  const MANAGER_ONLY = ["newshift","message","admin","roster","reports"];
+  const effectiveScreen = (currentUser && currentUser.role!=="manager" && MANAGER_ONLY.includes(screen)) ? "home" : screen;
   let body;
-  if(screen==="login" || !currentUser) body = sessionUser ? <Spinner/> : <LoginScreen state={state} setCurrentUser={setCurrentUser} setScreen={setScreen}/>;
-  else if(screen==="calendar"||screen==="schedule") body = <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="calendar"/>;
-  else if(screen==="weekgrid") body = <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="week"/>;
-  else if(screen==="availability") body = <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="avail"/>;
-  else if(screen==="hours") body = <HoursScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift}/>;
-  else if(screen==="expenses") body = <ExpenseScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser}/>;
-  else if(screen==="newshift") body = <NewShiftScreen state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>;
-  else if(screen==="message") body = <MessageScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} activeShift={state.shifts.find(s=>s.id===activeShiftId)||null} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>;
-  else if(screen==="shift") body = <ShiftScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift}/>;
-  else if(screen==="admin") body = <AdminScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
-  else if(screen==="roster") body = <RosterScreen state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
-  else if(screen==="search") body = <SearchScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>;
-  else if(screen==="reports") body = <ReportsScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
+  if(effectiveScreen==="login" || !currentUser) body = sessionUser ? <Spinner/> : <LoginScreen state={state} setCurrentUser={setCurrentUser} setScreen={setScreen}/>;
+  else if(effectiveScreen==="calendar"||screen==="schedule") body = <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="calendar"/>;
+  else if(effectiveScreen==="weekgrid") body = <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="week"/>;
+  else if(effectiveScreen==="availability") body = <ScheduleScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId} initialView="avail"/>;
+  else if(effectiveScreen==="hours") body = <HoursScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift}/>;
+  else if(effectiveScreen==="expenses") body = <ExpenseScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser}/>;
+  else if(effectiveScreen==="newshift") body = <NewShiftScreen state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>;
+  else if(effectiveScreen==="message") body = <MessageScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} activeShift={state.shifts.find(s=>s.id===activeShiftId)||null} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>;
+  else if(effectiveScreen==="shift") body = <ShiftScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift}/>;
+  else if(effectiveScreen==="admin") body = <AdminScreen state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} currentUser={currentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
+  else if(effectiveScreen==="roster") body = <RosterScreen state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
+  else if(effectiveScreen==="search") body = <SearchScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId} currentUser={currentUser}/>;
+  else if(effectiveScreen==="reports") body = <ReportsScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
   else body = <HomeScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} setCurrentUser={setCurrentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
 
   return <>{body}<ThemeToggle theme={theme} setTheme={setTheme}/>{saveError && <SaveErrorBanner onRetry={()=>{ setSaveError(false); flush({roster:state.roster,shifts:state.shifts,notifications:state.notifications,availability:state.availability,expenses:state.expenses||[],customRoleTags:state.customRoleTags||[],removedIdentities:state.removedIdentities||[]}); }} onDismiss={()=>setSaveError(false)}/>}</>;
@@ -2211,7 +2216,7 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
               </div>
             </div>
           </div>
-          <button onClick={()=>setCurrentUser(null)} style={{...btn("ghost"),padding:"6px 10px",fontSize:"10px",border:`1px solid ${C.border}`}}>LOG OUT</button>
+          <button onClick={()=>{setCurrentUser(null);setScreen("login");}} style={{...btn("ghost"),padding:"6px 10px",fontSize:"10px",border:`1px solid ${C.border}`}}>LOG OUT</button>
         </div>
       </div>
 
@@ -5466,7 +5471,9 @@ function SearchScreen({state, setScreen, setActiveShiftId, currentUser}) {
             <span style={lbl}>🏢 Clients ({clients.length})</span>
             <div style={{display:"flex",flexDirection:"column",gap:"4px",marginTop:"8px"}}>
               {clients.map((c,i)=>{
-                const count = state.shifts.filter(s=>s.client===c).length;
+                // Count within the searcher's visible shifts — crew shouldn't
+                // learn a client's total volume from shifts they're not on.
+                const count = searchableShifts.filter(s=>s.client===c).length;
                 return (
                   <div key={i} style={{...card({padding:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"})}}>
                     <span style={{fontSize:"12px",fontWeight:"700"}}>{c}</span>
@@ -5535,7 +5542,9 @@ function ReportsScreen({state, setScreen, setActiveShiftId}) {
   const util = state.roster.map(m => {
     let hrs = 0, shifts = 0;
     inRange.forEach(s => {
-      const c = s.crew.find(x=>x.rosterId===m.id);
+      // Same id-or-rosterId matching as HoursScreen — matching on rosterId
+      // alone made the two screens disagree on legacy crew entries.
+      const c = s.crew.find(x=>x.rosterId===m.id || x.id===m.id);
       if (c) { shifts++; hrs += calcHours(c.clockIn,c.clockOut,c.manualHours).total; }
     });
     return {name:m.name, shifts, hrs};
