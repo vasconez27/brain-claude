@@ -2722,31 +2722,41 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state,persist}) {
         <span style={lbl}>👕 Uniform</span>
         <div style={{fontSize:"12px",color:"#c8c4d4",lineHeight:"1.6"}}>{shift.uniform}</div>
       </div>
-      {/* Crew List */}
+      {/* Crew List. Crew see teammate NAMES/roles but not who confirmed —
+          confirmation status is between each worker and the manager. */}
       <div style={card()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
-          <span style={lbl}>👥 Crew ({shift.crew.filter(c=>c.confirmed&&!c.declined).length}/{shift.crew.filter(c=>!c.declined).length})</span>
-          <div style={{display:"flex",gap:"4px",alignItems:"center"}}>
-            <div style={{fontSize:"10px",color:C.green,fontWeight:"700"}}>{shift.crew.filter(c=>c.confirmed&&!c.declined).length} ✓</div>
-            <span style={{color:C.dim,fontSize:"9px"}}>·</span>
-            <div style={{fontSize:"10px",color:C.gold}}>{shift.crew.filter(c=>!c.confirmed&&!c.absent&&!c.declined).length} pending</div>
-            {shift.crew.filter(c=>c.declined).length>0 && (
-              <>
-                <span style={{color:C.dim,fontSize:"9px"}}>·</span>
-                <div style={{fontSize:"10px",color:C.red}}>{shift.crew.filter(c=>c.declined).length} declined</div>
-              </>
-            )}
+          <span style={lbl}>👥 Crew {isManager ? `(${shift.crew.filter(c=>c.confirmed&&!c.declined).length}/${shift.crew.filter(c=>!c.declined).length})` : `(${shift.crew.filter(c=>!c.declined).length})`}</span>
+          {isManager && (
+            <div style={{display:"flex",gap:"4px",alignItems:"center"}}>
+              <div style={{fontSize:"10px",color:C.green,fontWeight:"700"}}>{shift.crew.filter(c=>c.confirmed&&!c.declined).length} ✓</div>
+              <span style={{color:C.dim,fontSize:"9px"}}>·</span>
+              <div style={{fontSize:"10px",color:C.gold}}>{shift.crew.filter(c=>!c.confirmed&&!c.absent&&!c.declined).length} pending</div>
+              {shift.crew.filter(c=>c.declined).length>0 && (
+                <>
+                  <span style={{color:C.dim,fontSize:"9px"}}>·</span>
+                  <div style={{fontSize:"10px",color:C.red}}>{shift.crew.filter(c=>c.declined).length} declined</div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        {/* Progress bar (manager only) */}
+        {isManager && (
+          <div style={{background:C.s2,borderRadius:"3px",height:"3px",marginBottom:"10px",overflow:"hidden"}}>
+            <div style={{height:"100%",background:C.green,width:`${shift.crew.filter(c=>!c.declined).length>0?(shift.crew.filter(c=>c.confirmed&&!c.declined).length/shift.crew.filter(c=>!c.declined).length)*100:0}%`,transition:"width 0.5s ease"}}/>
           </div>
-        </div>
-        {/* Progress bar */}
-        <div style={{background:C.s2,borderRadius:"3px",height:"3px",marginBottom:"10px",overflow:"hidden"}}>
-          <div style={{height:"100%",background:C.green,width:`${shift.crew.filter(c=>!c.declined).length>0?(shift.crew.filter(c=>c.confirmed&&!c.declined).length/shift.crew.filter(c=>!c.declined).length)*100:0}%`,transition:"width 0.5s ease"}}/>
-        </div>
+        )}
         <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
           {shift.crew.map((c,i)=>{
-            const declined = c.declined;
-            const bdr = declined ? C.red : c.absent ? C.red : c.confirmed ? C.green : C.border;
-            const bg = declined ? C.redBg : c.absent ? C.redBg : c.confirmed ? C.greenBg : C.s2;
+            // A crew viewer sees status ONLY for their own row (and declined
+            // teammates are simply hidden from them, not shown as declined).
+            const isMe = me && (c.rosterId===me.rosterId || c.id===me.id || c.rosterId===me.id);
+            const showStatus = isManager || isMe;
+            if(!isManager && !isMe && c.declined) return null;
+            const declined = showStatus && c.declined;
+            const bdr = declined ? C.red : (showStatus && c.absent) ? C.red : (showStatus && c.confirmed) ? C.green : C.border;
+            const bg = declined ? C.redBg : (showStatus && c.absent) ? C.redBg : (showStatus && c.confirmed) ? C.greenBg : C.s2;
             return (
             <div key={c.id} style={{
               display:"flex",alignItems:"center",gap:"8px",padding:"10px",
@@ -2755,19 +2765,19 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state,persist}) {
             }}>
               <div style={{fontSize:"11px",fontWeight:"700",color:C.muted,width:"16px",textAlign:"center"}}>{i+1}</div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:"13px",fontWeight:"700",color:declined?C.red:c.absent?C.red:c.confirmed?C.green:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:declined?"line-through":"none"}}>
-                  {c.name}
+                <div style={{fontSize:"13px",fontWeight:"700",color:declined?C.red:(showStatus&&c.absent)?C.red:(showStatus&&c.confirmed)?C.green:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:declined?"line-through":"none"}}>
+                  {c.name}{isMe?" (you)":""}
                 </div>
-                {declined && (
+                {showStatus && declined && (
                   <div style={{fontSize:"9px",color:C.red,marginTop:"2px"}}>🚫 Declined {c.declinedAt?fmt(c.declinedAt):""}</div>
                 )}
-                {!declined && c.confirmed && c.confirmedAt && (
+                {showStatus && !declined && c.confirmed && c.confirmedAt && (
                   <div style={{fontSize:"9px",color:C.green,marginTop:"2px"}}>✅ Confirmed {fmt(c.confirmedAt)}</div>
                 )}
-                {!declined && !c.confirmed && !c.absent && (
+                {showStatus && !declined && !c.confirmed && !c.absent && (
                   <div style={{fontSize:"9px",color:C.muted,marginTop:"2px"}}>⏳ Awaiting confirmation</div>
                 )}
-                {!declined && c.absent && (
+                {showStatus && !declined && c.absent && (
                   <div style={{fontSize:"9px",color:C.red,marginTop:"2px"}}>❌ Marked absent</div>
                 )}
               </div>
@@ -2778,7 +2788,7 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state,persist}) {
                   const color = tag?.color || C.blue;
                   return <span style={badge(color, "transparent")}>{c.roleTag}</span>;
                 })()}
-                {declined?<span style={badge(C.red,C.redBg)}>🚫 DECLINED</span>:c.confirmed?<span style={badge(C.green,C.greenBg)}>✓ CONFIRMED</span>:c.absent?null:<span style={badge(C.muted,C.s3)}>PENDING</span>}
+                {showStatus && (declined?<span style={badge(C.red,C.redBg)}>🚫 DECLINED</span>:c.confirmed?<span style={badge(C.green,C.greenBg)}>✓ CONFIRMED</span>:c.absent?null:<span style={badge(C.muted,C.s3)}>PENDING</span>)}
               </div>
             </div>
             );
