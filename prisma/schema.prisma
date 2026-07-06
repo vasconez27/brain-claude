@@ -136,3 +136,11 @@ model Expense {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+// Sliding-window rate limiting for PIN sign-in attempts (keyed per client IP).
+model AuthAttempt {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  count       Int      @default(0)
+  windowStart DateTime @default(now())
+}
