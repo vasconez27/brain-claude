@@ -5954,14 +5954,6 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
       <PageHeader title="Expenses & Tax" sub={`${currentUser.name} · 1099-NEC · Private`} onBack={()=>setScreen("home")}/>
       <SectionTabs current="expenses" setScreen={setScreen} tabs={[{label:"⏱ Hours",screen:"hours"},{label:"💰 Expenses & Tax",screen:"expenses"}]}/>
 
-      {/* Privacy banner */}
-      <div style={{padding:"10px 14px",background:C.s1,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:"8px"}}>
-        <span style={{fontSize:"14px"}}>🔒</span>
-        <div style={{fontSize:"10px",color:C.muted,lineHeight:"1.4"}}>
-          <span style={{color:C.green,fontWeight:"700"}}>PRIVATE</span> — Your expense data is only visible to you. Managers cannot access other crew's tax info.
-        </div>
-      </div>
-
       {/* Tabs */}
       <div style={{display:"flex",gap:"4px",padding:"10px 12px",background:C.s1,borderBottom:`1px solid ${C.border}`}}>
         {["log","monthly","tax"].map(t=>(
