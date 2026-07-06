@@ -1036,7 +1036,7 @@ function Logo({size=40}) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // Searchable name dropdown – type to filter from a name list
-function SearchableNameDropdown({options, onSelect, placeholder="Type a name…", excludeIds=[], autoFocus=false}) {
+function SearchableNameDropdown({options, onSelect, placeholder="Type a name…", excludeIds=[], autoFocus=false, availabilityOf=null}) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const inputRef = useRef(null);
@@ -1074,6 +1074,13 @@ function SearchableNameDropdown({options, onSelect, placeholder="Type a name…"
                 </div>
               </div>
               {o.role==="Supervisor" && <span style={badge(C.gold,C.goldBg)}>SUP</span>}
+              {availabilityOf && (()=>{
+                const a = availabilityOf(o);
+                if(!a) return null;
+                const col = a==="available"?C.green:a==="tentative"?C.gold:C.red;
+                const bg  = a==="available"?C.greenBg:a==="tentative"?C.goldBg:C.redBg;
+                return <span style={badge(col,bg)}>{a==="available"?"FREE":a==="tentative"?"MAYBE":"BUSY"}</span>;
+              })()}
             </div>
           ))}
         </div>
@@ -5258,6 +5265,13 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
                 onSelect={addCrew}
                 excludeIds={selectedCrew.map(s=>s.rosterId)}
                 placeholder="Type 2-3 letters of a name…"
+                availabilityOf={m => {
+                  // The worker's marked availability for the shift's date —
+                  // answers "who can work that day?" before assigning.
+                  if(!form.date) return null;
+                  const a = (state.availability?.[m.id]||{})[form.date];
+                  return a && typeof a === "object" ? a.state : a;
+                }}
               />
             </div>
           </div>
