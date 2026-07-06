@@ -1106,6 +1106,9 @@ const INIT = {
   // expenses: array of expense entries per user
   // { id, userId, userName, date:"YYYY-MM-DD", items:[22.28,11.86], paid:171, mileage:0, notes:"", ts }
   expenses: [],
+  // Tombstones for roster deletions: [{userId, email, name, ts}] — checked at
+  // login so deleted crew don't resurrect themselves via self-registration.
+  removedIdentities: [],
   // Manager-added custom role tags beyond the defaults
   customRoleTags: [],
 };
@@ -1754,7 +1757,7 @@ export default function App({ sessionUser = null }) {
 
   const persist = useCallback((newState) => {
     setState(newState);
-    flush({roster:newState.roster,shifts:newState.shifts,notifications:newState.notifications,availability:newState.availability,expenses:newState.expenses||[],customRoleTags:newState.customRoleTags||[]});
+    flush({roster:newState.roster,shifts:newState.shifts,notifications:newState.notifications,availability:newState.availability,expenses:newState.expenses||[],customRoleTags:newState.customRoleTags||[],removedIdentities:newState.removedIdentities||[]});
   },[flush]);
 
   // Auto-login from the real NextAuth session — skips the demo's own login
@@ -1766,23 +1769,42 @@ export default function App({ sessionUser = null }) {
       // a hardcoded "manager" string made every manager share one expense bucket.
       setCurrentUser({ id: sessionUser.id || "manager", name:sessionUser.name || "Manager", role:"manager" });
     } else {
-      // Match the crew member to their roster entry by stable account id first,
-      // then by email, then name as a legacy fallback.
+      // Match the crew member to their roster entry: primary account id, any
+      // linked account id, then email, then name as a legacy fallback.
       const su = sessionUser;
       const roster = state.roster || [];
+      const boundTo = (m) => m.userId === su.id || (m.linkedUserIds||[]).includes(su.id);
       const match =
-        (su.id && roster.find(m => m.userId === su.id || m.id === su.id)) ||
+        (su.id && roster.find(m => boundTo(m) || m.id === su.id)) ||
         (su.email && roster.find(m => (m.email||"").toLowerCase() === su.email.toLowerCase())) ||
         roster.find(m => (m.name||"").toLowerCase() === (su.name||"").toLowerCase());
       if(match){
-        // Backfill the stable account id (and email) onto the roster entry so
-        // every future login matches instantly and confirmations/hours always
-        // attach to the same person — not a throwaway identity.
-        if(su.id && match.userId !== su.id){
-          persist({...state, roster: roster.map(m => m.id===match.id
-            ? {...m, userId: su.id, email: m.email || su.email || ""} : m)});
+        // Bind this account to the entry permanently. If the entry already
+        // belongs to a DIFFERENT account (same person, second Google email),
+        // LINK the new id instead of overwriting — overwriting made two
+        // accounts ping-pong the binding on every alternate login.
+        const needsBind = su.id && !boundTo(match);
+        // Heal orphaned money data: expenses stamped with this account that
+        // ended up keyed under a different roster id follow the person here.
+        const rekey = (state.expenses||[]).some(e => e.accountId===su.id && e.userId!==match.id);
+        if(needsBind || rekey){
+          persist({...state,
+            roster: roster.map(m => m.id===match.id
+              ? {...m,
+                  userId: m.userId || su.id,
+                  linkedUserIds: (m.userId && m.userId !== su.id && !(m.linkedUserIds||[]).includes(su.id))
+                    ? [...(m.linkedUserIds||[]), su.id] : (m.linkedUserIds||[]),
+                  email: m.email || su.email || ""}
+              : m),
+            expenses: (state.expenses||[]).map(e =>
+              e.accountId===su.id && e.userId!==match.id ? {...e, userId:match.id} : e),
+          });
         }
-        setCurrentUser({ id:match.id, name:match.name, role:"crew", rosterId:match.id });
+        setCurrentUser({ id:match.id, name:match.name, role:"crew", rosterId:match.id, accountId:su.id });
+      } else if((state.removedIdentities||[]).some(r => (su.id && r.userId===su.id) || (su.email && r.email && r.email.toLowerCase()===su.email.toLowerCase()))){
+        // Manager deleted this person from the roster — do NOT resurrect them
+        // via self-registration. They can view nothing until re-added.
+        setCurrentUser({ id: su.id || uid(), name: su.name || "Crew", role:"crew", accountId:su.id, removed:true });
       } else {
         // First sign-in with no manager-created roster entry: self-register them so
         // they appear in the roster for assignment and own a stable identity.
@@ -1792,7 +1814,7 @@ export default function App({ sessionUser = null }) {
           available:true, active:true, notes:"", tags:[], selfRegistered:true,
         };
         persist({...state, roster:[...roster, newMember]});
-        setCurrentUser({ id:newMember.id, name:newMember.name, role:"crew", rosterId:newMember.id });
+        setCurrentUser({ id:newMember.id, name:newMember.name, role:"crew", rosterId:newMember.id, accountId:su.id });
       }
     }
     autoLoggedIn.current = true;
@@ -1819,7 +1841,7 @@ export default function App({ sessionUser = null }) {
       // notification can't get separated by a poll landing between two saves.
       const ns = { ...prevState, shifts: newShifts,
         notifications: extraNotifs?.length ? [...extraNotifs, ...prevState.notifications] : prevState.notifications };
-      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[]});
+      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[]});
       return ns;
     });
   },[flush]);
@@ -1847,7 +1869,7 @@ export default function App({ sessionUser = null }) {
   else if(screen==="reports") body = <ReportsScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
   else body = <HomeScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} setCurrentUser={setCurrentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
 
-  return <>{body}<ThemeToggle theme={theme} setTheme={setTheme}/>{saveError && <SaveErrorBanner onRetry={()=>{ setSaveError(false); flush({roster:state.roster,shifts:state.shifts,notifications:state.notifications,availability:state.availability,expenses:state.expenses||[],customRoleTags:state.customRoleTags||[]}); }} onDismiss={()=>setSaveError(false)}/>}</>;
+  return <>{body}<ThemeToggle theme={theme} setTheme={setTheme}/>{saveError && <SaveErrorBanner onRetry={()=>{ setSaveError(false); flush({roster:state.roster,shifts:state.shifts,notifications:state.notifications,availability:state.availability,expenses:state.expenses||[],customRoleTags:state.customRoleTags||[],removedIdentities:state.removedIdentities||[]}); }} onDismiss={()=>setSaveError(false)}/>}</>;
 }
 
 // Shown when a write to the shared workspace fails, so a user never thinks an
@@ -5739,6 +5761,9 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
     const entry = {
       id: uid(),
       userId: currentUser.id,
+      // Ties the expense to the login account so if this person's roster
+      // identity is ever re-matched, their money history follows them.
+      accountId: currentUser.accountId || undefined,
       userName: currentUser.name,
       date: form.date,
       items: validItems,
