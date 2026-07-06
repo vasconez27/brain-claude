@@ -1508,10 +1508,6 @@ function SaveToRosterModal({person, onSave, onSkip, onClose}) {
               <span style={lbl}>Phone</span>
               <input value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="(555) 000-0000" style={{...inp,marginTop:"4px"}}/>
             </div>
-            <div>
-              <span style={lbl}>Login PIN</span>
-              <input value={form.pin} onChange={e=>setForm(f=>({...f,pin:e.target.value.replace(/\D/g,"").slice(0,4)}))} placeholder="0000" style={{...inp,marginTop:"4px"}}/>
-            </div>
           </div>
           <div>
             <span style={lbl}>Email</span>
@@ -4771,6 +4767,22 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
   function updateMember(id, patch){
     persist({...state,roster:state.roster.map(r=>r.id===id?{...r,...patch}:r)});
   }
+  // Reset a crew member's REAL login PIN (hashed server-side). Managers can
+  // only set a new one, never view the existing one.
+  const [pinReset, setPinReset] = useState({}); // {rosterId: {value, status}}
+  async function resetPin(member){
+    const st = pinReset[member.id] || {};
+    const pin = (st.value||"").trim();
+    if(!/^\d{4,6}$/.test(pin)){ setPinReset(p=>({...p,[member.id]:{...st,status:"PIN must be 4–6 digits"}})); return; }
+    setPinReset(p=>({...p,[member.id]:{...st,status:"Saving…"}}));
+    try {
+      const res = await fetch("/api/auth/reset-pin",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({userId:member.userId||undefined, email:member.email||undefined, pin})});
+      const j = await res.json().catch(()=>({}));
+      if(res.ok){ setPinReset(p=>({...p,[member.id]:{value:"",status:`✓ PIN set to ${pin} — tell them`}})); }
+      else { setPinReset(p=>({...p,[member.id]:{...st,status:j.error||"Failed"}})); }
+    } catch { setPinReset(p=>({...p,[member.id]:{...st,status:"Network error"}})); }
+  }
   function archiveMember(id){
     updateMember(id,{active:false});
   }
@@ -4845,10 +4857,7 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
             <input value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="Phone" style={inp}/>
             <input value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="Email" style={inp}/>
             <input value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Internal notes (optional)" style={inp}/>
-            <div>
-              <span style={lbl}>4-digit PIN</span>
-              <input value={form.pin} onChange={e=>setForm(f=>({...f,pin:e.target.value.replace(/\D/g,"").slice(0,4)}))} placeholder="0000" maxLength={4} style={{...inp,marginTop:"4px",textAlign:"center",letterSpacing:"0.2em"}}/>
-            </div>
+            <div style={{fontSize:"10px",color:C.dim,lineHeight:"1.4"}}>Crew set their own PIN when they first sign in. To set or reset it for them, use <b>Reset Login PIN</b> on their profile.</div>
             <div style={{display:"flex",gap:"6px"}}>
               <button onClick={addMember} style={{...btn("gold"),flex:1}}>ADD MEMBER</button>
               <button onClick={()=>setAdding(false)} style={{...btn("ghost"),flex:1,border:`1px solid ${C.border}`}}>CANCEL</button>
@@ -4943,8 +4952,14 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
                     <input value={m.phone||""} onChange={e=>updateMember(m.id,{phone:e.target.value})} style={{...inp,marginTop:"4px"}}/>
                   </div>
                   <div>
-                    <span style={lbl}>PIN</span>
-                    <input value={m.pin||"0000"} onChange={e=>updateMember(m.id,{pin:e.target.value.replace(/\D/g,"").slice(0,4)})} maxLength={4} style={{...inp,marginTop:"4px",textAlign:"center",letterSpacing:"0.2em"}}/>
+                    <span style={lbl}>Reset Login PIN</span>
+                    <div style={{display:"flex",gap:"6px",marginTop:"4px"}}>
+                      <input value={(pinReset[m.id]?.value)||""} onChange={e=>setPinReset(p=>({...p,[m.id]:{...(p[m.id]||{}),value:e.target.value.replace(/\D/g,"").slice(0,6)}}))}
+                        placeholder="new PIN" inputMode="numeric" maxLength={6}
+                        style={{...inp,textAlign:"center",letterSpacing:"0.2em"}}/>
+                      <button onClick={()=>resetPin(m)} style={{...btn("gold"),padding:"8px 12px",fontSize:"10px",whiteSpace:"nowrap"}}>SET</button>
+                    </div>
+                    {pinReset[m.id]?.status && <div style={{fontSize:"9px",marginTop:"3px",color:pinReset[m.id].status.startsWith("✓")?C.green:C.muted}}>{pinReset[m.id].status}</div>}
                   </div>
                 </div>
                 <div>
