@@ -4120,21 +4120,23 @@ function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId}) {
               </div>
             </div>
 
-            {/* INDIVIDUAL SMS - tap each one separately */}
-            {(activeShift.crew||[]).filter(c=>includedCrew.includes(c.id) && c.phone).length>0 && (
+            {/* INDIVIDUAL SMS - tap each one separately. Contact info comes
+                from the CURRENT roster (contactFor), matching the group blast —
+                the frozen snapshot on the crew entry texted dead numbers. */}
+            {(activeShift.crew||[]).filter(c=>includedCrew.includes(c.id) && contactFor(c).phone).length>0 && (
               <div style={card()}>
                 <span style={lbl}>📱 Or send 1-on-1 individually</span>
                 <div style={{fontSize:"10px",color:C.muted,marginTop:"4px",marginBottom:"10px",lineHeight:"1.5"}}>
                   Tap each name → opens their personal SMS thread with the message pre-filled.
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
-                  {(activeShift.crew||[]).filter(c=>includedCrew.includes(c.id) && c.phone).map(c=>(
-                    <a key={c.id} href={`sms:${c.phone}?&body=${encodeURIComponent(messageText)}`}
+                  {(activeShift.crew||[]).filter(c=>includedCrew.includes(c.id) && contactFor(c).phone).map(c=>(
+                    <a key={c.id} href={`sms:${contactFor(c).phone}?&body=${encodeURIComponent(messageText)}`}
                       style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",background:C.s2,borderRadius:"7px",border:`1px solid ${C.border}`,textDecoration:"none",color:C.text}}>
                       <span style={{fontSize:"14px"}}>💬</span>
                       <div style={{flex:1}}>
                         <div style={{fontSize:"12px",fontWeight:"700"}}>{c.name}</div>
-                        <div style={{fontSize:"9px",color:C.muted}}>{c.phone}</div>
+                        <div style={{fontSize:"9px",color:C.muted}}>{contactFor(c).phone}</div>
                       </div>
                       <span style={{fontSize:"11px",color:C.green}}>SEND →</span>
                     </a>
@@ -4158,15 +4160,18 @@ function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId}) {
             <div style={card()}>
               <span style={lbl}>📊 Recipient Status</span>
               <div style={{marginTop:"8px",display:"flex",flexDirection:"column",gap:"6px"}}>
-                {(activeShift.crew||[]).filter(c=>includedCrew.includes(c.id)).map(c=>(
-                  <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"11px",padding:"4px 0"}}>
-                    <span style={{color:C.text}}>{c.name}</span>
-                    <div style={{display:"flex",gap:"6px"}}>
-                      <span style={{color:c.phone?C.green:C.dim}}>{c.phone?"📱":"—"}</span>
-                      <span style={{color:c.email?C.green:C.dim}}>{c.email?"📧":"—"}</span>
+                {(activeShift.crew||[]).filter(c=>includedCrew.includes(c.id)).map(c=>{
+                  const fresh = contactFor(c);
+                  return (
+                    <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"11px",padding:"4px 0"}}>
+                      <span style={{color:C.text}}>{c.name}</span>
+                      <div style={{display:"flex",gap:"6px"}}>
+                        <span style={{color:fresh.phone?C.green:C.dim}}>{fresh.phone?"📱":"—"}</span>
+                        <span style={{color:fresh.email?C.green:C.dim}}>{fresh.email?"📧":"—"}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
