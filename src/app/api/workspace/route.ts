@@ -121,12 +121,16 @@ function mergeCrewWrite(server: Rec, client: Rec, ownIds: Set<string>, accountId
     const clientCrew = new Map(
       (Array.isArray(cs.crew) ? (cs.crew as Rec[]) : []).map(c => [c.id, c])
     );
+    // Is THIS crew member the shift's Crew Captain? Verified against the
+    // SERVER's crew (roleTag "CC"), never the client's claim — so a non-CC
+    // can't forge ccHoursSubmitted to rewrite everyone's hours.
+    const isCC = (Array.isArray(ss.crew) ? (ss.crew as Rec[]) : []).some(c =>
+      c.roleTag === "CC" && (ownIds.has(c.rosterId as string) || ownIds.has(c.id as string)));
     const crew = (Array.isArray(ss.crew) ? (ss.crew as Rec[]) : []).map(sc => {
       const cc = clientCrew.get(sc.id);
       if (!cc) return sc;
       const isOwn = ownIds.has(sc.rosterId as string) || ownIds.has(sc.id as string);
-      const ccSubmitting = Boolean(cs.ccHoursSubmitted);
-      if (!isOwn && !ccSubmitting) return sc;
+      if (!isOwn && !isCC) return sc; // only your own entry, unless you're the CC
       const upd: Rec = { ...sc };
       for (const f of CREW_SELF_FIELDS) if (f in cc) upd[f] = cc[f];
       return upd;
@@ -140,10 +144,11 @@ function mergeCrewWrite(server: Rec, client: Rec, ownIds: Set<string>, accountId
       ...ss,
       crew,
       tasks: Array.isArray(cs.tasks) ? cs.tasks : ss.tasks,
-      ccHoursSubmitted: cs.ccHoursSubmitted ?? ss.ccHoursSubmitted,
-      ccSubmittedBy: cs.ccSubmittedBy ?? ss.ccSubmittedBy,
-      ccSubmittedAt: cs.ccSubmittedAt ?? ss.ccSubmittedAt,
-      ccNotes: cs.ccNotes ?? ss.ccNotes,
+      // CC-only fields: honored only when the submitter is actually the CC.
+      ccHoursSubmitted: isCC ? (cs.ccHoursSubmitted ?? ss.ccHoursSubmitted) : ss.ccHoursSubmitted,
+      ccSubmittedBy: isCC ? (cs.ccSubmittedBy ?? ss.ccSubmittedBy) : ss.ccSubmittedBy,
+      ccSubmittedAt: isCC ? (cs.ccSubmittedAt ?? ss.ccSubmittedAt) : ss.ccSubmittedAt,
+      ccNotes: isCC ? (cs.ccNotes ?? ss.ccNotes) : ss.ccNotes,
       announcements: [...addedAnns, ...serverAnns],
       lastUpdated: cs.lastUpdated ?? ss.lastUpdated,
       updatedBy: cs.updatedBy ?? ss.updatedBy,
