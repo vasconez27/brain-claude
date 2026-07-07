@@ -83,7 +83,18 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ data: { ...data, roster }, updatedAt: ws?.updatedAt ?? null });
+  // Manager contact list (name + phone) so crew-side features like the CC
+  // report can offer "text your manager" links. Derived, never persisted.
+  const managers = await prisma.user.findMany({
+    where: { role: "MANAGER" },
+    select: { id: true, name: true, phone: true },
+    orderBy: { name: "asc" },
+  });
+
+  return NextResponse.json({
+    data: { ...data, roster, managerContacts: managers },
+    updatedAt: ws?.updatedAt ?? null,
+  });
 }
 
 // Crew-entry fields a crew member may write on a shift (their own responses
@@ -120,6 +131,11 @@ function mergeCrewWrite(server: Rec, client: Rec, ownIds: Set<string>, accountId
       for (const f of CREW_SELF_FIELDS) if (f in cc) upd[f] = cc[f];
       return upd;
     });
+    // Announcements: crew may ADD (the CC report posts one) but never edit
+    // or remove the manager's — union by id, client's new ones first.
+    const serverAnns = Array.isArray(ss.announcements) ? (ss.announcements as Rec[]) : [];
+    const knownAnns = new Set(serverAnns.map(a => a.id));
+    const addedAnns = (Array.isArray(cs.announcements) ? (cs.announcements as Rec[]) : []).filter(a => !knownAnns.has(a.id));
     return {
       ...ss,
       crew,
@@ -127,6 +143,8 @@ function mergeCrewWrite(server: Rec, client: Rec, ownIds: Set<string>, accountId
       ccHoursSubmitted: cs.ccHoursSubmitted ?? ss.ccHoursSubmitted,
       ccSubmittedBy: cs.ccSubmittedBy ?? ss.ccSubmittedBy,
       ccSubmittedAt: cs.ccSubmittedAt ?? ss.ccSubmittedAt,
+      ccNotes: cs.ccNotes ?? ss.ccNotes,
+      announcements: [...addedAnns, ...serverAnns],
       lastUpdated: cs.lastUpdated ?? ss.lastUpdated,
       updatedBy: cs.updatedBy ?? ss.updatedBy,
     };

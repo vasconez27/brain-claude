@@ -2518,7 +2518,7 @@ function NavCard({label,icon,color,onClick}) {
 // ══════════════════════════════════════════════════════════════════════════════
 // SHIFT SCREEN – crew view of the brief
 // ══════════════════════════════════════════════════════════════════════════════
-function CCHoursTab({shift, updateShift, currentUser}) {
+function CCHoursTab({shift, updateShift, currentUser, state, persist}) {
   const start = parseShiftStart(shift.date, shift.callTime);
   const end = start ? getShiftEnd(start, shift.endTime) : null;
   const scheduledHours = (start && end) ? Math.round(((end - start) / 3600000) * 100) / 100 : 0;
@@ -2530,55 +2530,158 @@ function CCHoursTab({shift, updateShift, currentUser}) {
     });
     return m;
   });
+  const [notes, setNotes] = useState(shift.ccNotes || "");
+  const [copied, setCopied] = useState(false);
 
-  function submitHours() {
+  const activeCrew = shift.crew.filter(c => !c.declined);
+  const isMeCC = (c) => c.rosterId===currentUser.id || c.id===currentUser.id;
+
+  // The report text — mirrors how CCs already text hours to their manager.
+  // After submission, hours come from the saved crew entries so the report
+  // stays reproducible; before, from the live inputs.
+  const hoursFor = (c) => shift.ccHoursSubmitted
+    ? (c.manualHours ?? scheduledHours)
+    : (hoursMap[c.id] ?? scheduledHours);
+  const totalH = activeCrew.reduce((a,c)=>a+(parseFloat(hoursFor(c))||0),0);
+  const noteText = shift.ccHoursSubmitted ? (shift.ccNotes || "") : notes;
+  const reportText = [
+    `CREW HOURS — ${shift.client} · ${shift.date}`,
+    ``,
+    ...activeCrew.map(c => `${c.roleTag==="CC"?"CC ":""}${c.name} — ${hoursFor(c)}h`),
+    ``,
+    `Total: ${Math.round(totalH*100)/100}h`,
+    ...(noteText.trim() ? [``, `Notes: ${noteText.trim()}`] : []),
+    ``,
+    `— ${currentUser.name}, Crew Captain`,
+  ].join("\n");
+
+  function submitReport() {
+    // Hours land on each crew entry (feeds Hours & Pay + Reports); the note
+    // is stored on the shift; managers get the report as an announcement AND
+    // a manager-targeted notification.
     updateShift(shift.id, s => ({
       ...s,
       ccHoursSubmitted: true,
       ccSubmittedBy: currentUser.name,
       ccSubmittedAt: now(),
+      ccNotes: notes.trim(),
+      announcements: [
+        {id:uid(), text:reportText, ts:now(), from:`${currentUser.name} (CC)`},
+        ...(s.announcements||[]),
+      ],
       crew: s.crew.map(c => c.declined ? c : {...c, manualHours: hoursMap[c.id] ?? scheduledHours}),
-    }), currentUser.name);
+    }), currentUser.name, [{
+      id:uid(), to:"managers", shiftId:shift.id, ts:now(),
+      text:`👷 CC report: ${shift.client} · ${shift.date} — hours confirmed by ${currentUser.name}${notes.trim()?" + notes":""}`,
+    }]);
   }
+
+  function copyReport() {
+    navigator.clipboard.writeText(reportText)
+      .then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);})
+      .catch(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);});
+  }
+
+  const managers = (state?.managerContacts||[]).filter(m=>m.phone);
+
+  // Send panel — shared between pre- and post-submit views so the CC can
+  // always copy/text the report (phone-first: big tap targets).
+  const sendPanel = (
+    <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+      <div style={{...card({border:`1.5px solid ${C.gold}`})}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+          <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",letterSpacing:"0.12em"}}>📨 REPORT PREVIEW</div>
+          <div style={{fontSize:"9px",color:C.muted}}>{reportText.length} chars</div>
+        </div>
+        <div style={{background:C.s2,borderRadius:"7px",padding:"14px",fontSize:"12px",lineHeight:"1.8",color:C.text,whiteSpace:"pre-wrap",fontFamily:"'Courier New',monospace",maxHeight:"420px",overflowY:"auto",border:`1px solid ${C.border}`}}>
+          {reportText}
+        </div>
+      </div>
+      <div style={card()}>
+        <span style={lbl}>📤 Send to manager</span>
+        <div style={{display:"flex",flexDirection:"column",gap:"8px",marginTop:"10px"}}>
+          <button onClick={copyReport} style={{...btn(copied?"green":"gold",true),padding:"12px"}}>
+            {copied ? "✓ COPIED TO CLIPBOARD!" : "📋 COPY REPORT"}
+          </button>
+          {managers.map(m=>(
+            <a key={m.id} href={`sms:${m.phone}?&body=${encodeURIComponent(reportText)}`}
+              style={{display:"flex",alignItems:"center",gap:"10px",padding:"12px",background:C.s2,borderRadius:"7px",border:`1px solid ${C.border}`,textDecoration:"none",color:C.text}}>
+              <span style={{fontSize:"14px"}}>💬</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:"12px",fontWeight:"700"}}>{m.name||"Manager"}</div>
+                <div style={{fontSize:"9px",color:C.muted}}>{m.phone}</div>
+              </div>
+              <span style={{fontSize:"11px",color:C.green}}>SEND →</span>
+            </a>
+          ))}
+          {managers.length===0 && (
+            <a href={`sms:?&body=${encodeURIComponent(reportText)}`}
+              style={{...btn("green",true),padding:"12px",textDecoration:"none",textAlign:"center",display:"block"}}>
+              💬 TEXT IT (pick contact)
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 
   if (shift.ccHoursSubmitted) {
     return (
-      <div style={{textAlign:"center",padding:"36px 20px"}}>
-        <div style={{fontSize:"36px",marginBottom:"8px"}}>✅</div>
-        <div style={{fontSize:"14px",fontWeight:"700",color:C.green,marginBottom:"4px"}}>Hours Confirmed</div>
-        <div style={{fontSize:"11px",color:C.muted}}>By {shift.ccSubmittedBy} · {shift.ccSubmittedAt?fmt(shift.ccSubmittedAt):""}</div>
-        <div style={{fontSize:"10px",color:C.dim,marginTop:"8px"}}>Manager can still adjust individual entries if needed. Hours were applied when each crew member confirmed.</div>
+      <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+        <div style={{background:C.greenBg,border:`1.5px solid ${C.green}`,borderRadius:"10px",padding:"12px",display:"flex",gap:"10px",alignItems:"center"}}>
+          <span style={{fontSize:"20px"}}>✅</span>
+          <div>
+            <div style={{fontSize:"13px",fontWeight:"700",color:C.green}}>Hours Confirmed</div>
+            <div style={{fontSize:"10px",color:C.muted}}>By {shift.ccSubmittedBy} · {shift.ccSubmittedAt?fmt(shift.ccSubmittedAt):""} · manager notified</div>
+          </div>
+        </div>
+        {sendPanel}
       </div>
     );
   }
 
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
-      <div style={card()}>
-        <span style={lbl}>Review crew hours · {shift.callTime} – {shift.endTime} · {scheduledHours}h scheduled</span>
-        <div style={{fontSize:"11px",color:C.muted,marginBottom:"14px"}}>Hours were applied when each crew member confirmed. Adjust anyone who worked different.</div>
-        <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
-          {shift.crew.filter(c => !c.declined).map(c => (
-            <div key={c.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-              padding:"10px 12px",background:C.s2,border:`1px solid ${C.border}`,borderRadius:"8px"}}>
-              <div>
-                <div style={{fontSize:"13px",fontWeight:"700",color:C.text}}>{c.name}</div>
-                {c.roleTag&&<div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.1em"}}>{c.roleTag}</div>}
+    <div className="bcn-row-side">
+      {/* ── LEFT: HOURS + NOTES ── */}
+      <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+        <div style={card()}>
+          <span style={lbl}>Crew hours · {shift.callTime} – {shift.endTime} · {scheduledHours}h scheduled</span>
+          <div style={{fontSize:"11px",color:C.muted,marginBottom:"14px"}}>Adjust anyone who worked different hours, then confirm — hours go to everyone's pay records.</div>
+          <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+            {activeCrew.map(c => (
+              <div key={c.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+                padding:"10px 12px",background:C.s2,border:`1px solid ${C.border}`,borderRadius:"8px"}}>
+                <div>
+                  <div style={{fontSize:"13px",fontWeight:"700",color:C.text}}>{c.name}{isMeCC(c)?" (you)":""}</div>
+                  {c.roleTag&&<div style={{fontSize:"9px",color:C.muted,letterSpacing:"0.1em"}}>{c.roleTag}</div>}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                  <input type="number" step="0.5" min="0" max="24"
+                    value={hoursMap[c.id] ?? scheduledHours}
+                    onChange={e=>setHoursMap(m=>({...m,[c.id]:parseFloat(e.target.value)||0}))}
+                    style={{...inp,width:"68px",textAlign:"center",padding:"6px 8px"}}/>
+                  <span style={{fontSize:"10px",color:C.muted,letterSpacing:"0.08em"}}>HRS</span>
+                </div>
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                <input type="number" step="0.5" min="0" max="24"
-                  value={hoursMap[c.id] ?? scheduledHours}
-                  onChange={e=>setHoursMap(m=>({...m,[c.id]:parseFloat(e.target.value)||0}))}
-                  style={{...inp,width:"68px",textAlign:"center",padding:"6px 8px"}}/>
-                <span style={{fontSize:"10px",color:C.muted,letterSpacing:"0.08em"}}>HRS</span>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
+
+        <div style={card()}>
+          <span style={lbl}>✏️ End-of-shift notes (optional)</span>
+          <div style={{fontSize:"10px",color:C.muted,marginTop:"3px",marginBottom:"8px"}}>Anything the manager should know — how it went, issues on site, who stepped up.</div>
+          <textarea value={notes} onChange={e=>setNotes(e.target.value)}
+            placeholder="How did the shift go?"
+            style={{...inp,minHeight:"90px",resize:"vertical"}}/>
+        </div>
+
+        <button onClick={submitReport} style={{...btn("green",true),padding:"14px",fontSize:"12px",letterSpacing:"0.1em"}}>
+          ✓ CONFIRM HOURS & NOTIFY MANAGER
+        </button>
       </div>
-      <button onClick={submitHours} style={{...btn("green",true),padding:"14px",fontSize:"12px",letterSpacing:"0.1em"}}>
-        ✓ CONFIRM HOURS
-      </button>
+
+      {/* ── RIGHT: LIVE PREVIEW + SEND (stacks below on phones) ── */}
+      {sendPanel}
     </div>
   );
 }
@@ -2657,7 +2760,7 @@ function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activ
         {[
           {k:"brief", label:"📋 Brief"},
           {k:"tasks", label:"✅ Tasks"},
-          ...(isCC && shiftEnded ? [{k:"hours", label:activeShift.ccHoursSubmitted?"⏱ Hours ✓":"⏱ Hours"}] : []),
+          ...(isCC ? [{k:"hours", label:activeShift.ccHoursSubmitted?"👷 CC ✓":"👷 CC"}] : []),
         ].map(t=>(
           <button key={t.k} onClick={()=>setTab(t.k)} style={{...tabBtn(tab===t.k),
             ...(t.k==="hours"&&activeShift.ccHoursSubmitted&&tab!==t.k?{color:C.green}:{})}}>
@@ -2669,7 +2772,7 @@ function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activ
       <div className="bcn-body" style={{paddingBottom:"80px"}}>
         {tab==="brief"&&<BriefTab shift={activeShift} me={me} onConfirm={confirm} onDecline={decline} isManager={isManager} state={state} persist={persist}/>}
         {tab==="tasks"&&<TasksTab shift={activeShift} onToggle={toggleTask} state={state} persist={persist} isManager={isManager}/>}
-        {tab==="hours"&&isCC&&shiftEnded&&<CCHoursTab shift={activeShift} updateShift={updateShift} currentUser={currentUser}/>}
+        {tab==="hours"&&isCC&&<CCHoursTab shift={activeShift} updateShift={updateShift} currentUser={currentUser} state={state} persist={persist}/>}
       </div>
     </div>
   );
