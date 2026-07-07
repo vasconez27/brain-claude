@@ -2197,6 +2197,21 @@ function ManagerOpsOverview({state, setScreen, setActiveShiftId}) {
 }
 
 // Compact 7-day week strip for the dashboard (no nested page body, no giant grid)
+// A crew member's personal paste-to-schedule entries, shaped like shifts so
+// the schedule views (week strip, calendar, hour grid) render them as time
+// blocks. Marked personal:true so they style distinctly and don't route to a
+// (nonexistent) real shift on tap.
+function personalAsShifts(state, currentUser) {
+  if (!currentUser || currentUser.role === "manager") return [];
+  return (state.personalEntries||[])
+    .filter(pe => pe.ownerId===currentUser.id || pe.ownerId===currentUser.accountId)
+    .map(pe => ({
+      id: pe.id, client: pe.title||"Personal", date: pe.date,
+      callTime: pe.callTime||"", endTime: pe.endTime||"",
+      location: pe.location||"", notes: pe.notes||"", crew: [], personal: true,
+    }));
+}
+
 function WeekStrip({state, currentUser, setScreen, setActiveShiftId}) {
   const [offset, setOffset] = useState(0); // weeks from current
   const isManager = currentUser.role==="manager";
@@ -2205,8 +2220,9 @@ function WeekStrip({state, currentUser, setScreen, setActiveShiftId}) {
   const days = Array.from({length:7}, (_,i)=>{ const d=new Date(base); d.setDate(d.getDate()+i); return d; });
   const today = new Date(); today.setHours(0,0,0,0);
 
+  const myPersonal = personalAsShifts(state, currentUser);
   function shiftsOn(date) {
-    return state.shifts.filter(s=>{
+    const real = state.shifts.filter(s=>{
       const st = parseShiftStart(s.date, s.callTime);
       if(!st) return false;
       const sameDay = st.getFullYear()===date.getFullYear() && st.getMonth()===date.getMonth() && st.getDate()===date.getDate();
@@ -2214,6 +2230,12 @@ function WeekStrip({state, currentUser, setScreen, setActiveShiftId}) {
       if(!isManager) return s.crew.some(c=>c.rosterId===currentUser.id || c.id===currentUser.id);
       return true;
     });
+    // Crew's own pasted entries appear as blocks too.
+    const personal = myPersonal.filter(s=>{
+      const st = parseShiftStart(s.date, s.callTime);
+      return st && st.getFullYear()===date.getFullYear() && st.getMonth()===date.getMonth() && st.getDate()===date.getDate();
+    });
+    return [...real, ...personal];
   }
 
   const rangeLabel = `${days[0].toLocaleDateString([],{month:"short",day:"numeric"})} – ${days[6].toLocaleDateString([],{month:"short",day:"numeric"})}`;
@@ -2241,9 +2263,9 @@ function WeekStrip({state, currentUser, setScreen, setActiveShiftId}) {
               <div style={{fontSize:"8px",color:C.dim,letterSpacing:"0.05em"}}>{["SUN","MON","TUE","WED","THU","FRI","SAT"][d.getDay()]}</div>
               <div style={{fontSize:"13px",fontWeight:"700",color:isToday?C.gold:C.text}}>{d.getDate()}</div>
               {ds.slice(0,2).map(s=>(
-                <div key={s.id} onClick={()=>{setActiveShiftId(s.id);setScreen("shift");}}
-                  title={s.client}
-                  style={{width:"100%",fontSize:"7px",fontWeight:"700",color:"#1a1400",background:"#E8C84A",borderRadius:"3px",padding:"2px 1px",cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textAlign:"center"}}>
+                <div key={s.id} onClick={()=>{ if(s.personal){setScreen("home");} else {setActiveShiftId(s.id);setScreen("shift");} }}
+                  title={s.personal?`${s.client} (personal)`:s.client}
+                  style={{width:"100%",fontSize:"7px",fontWeight:"700",color:s.personal?"#fff":"#1a1400",background:s.personal?C.blue:"#E8C84A",borderRadius:"3px",padding:"2px 1px",cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textAlign:"center"}}>
                   {s.client}
                 </div>
               ))}
@@ -3116,11 +3138,13 @@ function CalendarScreen({state,persist,setScreen,currentUser,activeShift,setActi
   const firstDay = new Date(year,month,1).getDay();
   const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
-  // Managers see every shift; crew only see shifts they're assigned to.
+  // Managers see every shift; crew only see shifts they're assigned to —
+  // plus their own pasted personal entries as blocks.
   const isManager = currentUser.role==="manager";
   const visibleShifts = isManager
     ? state.shifts
-    : state.shifts.filter(s=>s.crew?.some(c=>c.rosterId===currentUser.id||c.id===currentUser.id));
+    : [...state.shifts.filter(s=>s.crew?.some(c=>c.rosterId===currentUser.id||c.id===currentUser.id)),
+       ...personalAsShifts(state, currentUser)];
 
   function getShiftsForDay(d) {
     return visibleShifts.filter(s=>{
@@ -3177,7 +3201,7 @@ function CalendarScreen({state,persist,setScreen,currentUser,activeShift,setActi
                 style={{borderRadius:"8px",padding:"6px 4px",minHeight:"52px",textAlign:"center",cursor:"pointer",background:isSel?C.goldBg:isToday?C.s3:C.s1,border:`1px solid ${isSel?C.gold:isToday?C.borderHi:C.border}`,position:"relative"}}>
                 <div style={{fontSize:"13px",fontWeight:isToday?"700":"400",color:isSel?C.gold:isToday?C.text:C.muted}}>{d}</div>
                 {shifts.length>0&&<div style={{marginTop:"2px",display:"flex",justifyContent:"center",gap:"2px",flexWrap:"wrap"}}>
-                  {shifts.map(s=><div key={s.id} style={{width:"6px",height:"6px",borderRadius:"50%",background:"#E8C84A"}}/>)}
+                  {shifts.map(s=><div key={s.id} style={{width:"6px",height:"6px",borderRadius:"50%",background:s.personal?C.blue:"#E8C84A"}}/>)}
                 </div>}
                 {available>0&&<div style={{position:"absolute",bottom:"3px",left:"3px",width:"5px",height:"5px",borderRadius:"50%",background:C.green}}/>}
                 {unavailable>0&&<div style={{position:"absolute",bottom:"3px",right:"3px",width:"5px",height:"5px",borderRadius:"50%",background:C.red}}/>}
@@ -3188,7 +3212,7 @@ function CalendarScreen({state,persist,setScreen,currentUser,activeShift,setActi
 
         {/* Legend */}
         <div style={{display:"flex",gap:"14px",marginTop:"10px",flexWrap:"wrap"}}>
-          {[{color:C.gold,label:"Shift"},{color:C.green,label:"Available"},{color:C.red,label:"Unavailable"}].map(l=>(
+          {[{color:C.gold,label:"Shift"},...(!isManager?[{color:C.blue,label:"Personal"}]:[]),{color:C.green,label:"Available"},{color:C.red,label:"Unavailable"}].map(l=>(
             <div key={l.label} style={{display:"flex",alignItems:"center",gap:"5px"}}>
               <div style={{width:"8px",height:"8px",borderRadius:"50%",background:l.color}}/>
               <span style={{fontSize:"10px",color:C.muted}}>{l.label}</span>
@@ -3206,11 +3230,14 @@ function CalendarScreen({state,persist,setScreen,currentUser,activeShift,setActi
               <div style={{marginBottom:"12px"}}>
                 <span style={lbl}>Shifts</span>
                 {selectedShifts.map(s=>(
-                  <div key={s.id} onClick={()=>{setActiveShiftId(s.id);setScreen("shift");}}
-                    style={{...card({border:`1px solid ${C.gold}`,cursor:"pointer",marginTop:"6px"})}}>
-                    <div style={{fontSize:"14px",fontWeight:"700",color:C.gold}}>{s.client}</div>
-                    <div style={{fontSize:"11px",color:C.muted,marginTop:"2px"}}>{s.callTime}–{s.endTime} · {s.location}</div>
-                    <div style={{fontSize:"11px",color:C.text,marginTop:"4px"}}>{s.crew.length} crew · {s.crew.filter(c=>c.confirmed).length} confirmed</div>
+                  <div key={s.id} onClick={()=>{ if(s.personal){setScreen("home");} else {setActiveShiftId(s.id);setScreen("shift");} }}
+                    style={{...card({border:`1px solid ${s.personal?C.blue:C.gold}`,cursor:"pointer",marginTop:"6px"})}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div style={{fontSize:"14px",fontWeight:"700",color:s.personal?C.blue:C.gold}}>{s.client}</div>
+                      {s.personal && <span style={badge(C.blue,C.blueBg)}>PERSONAL</span>}
+                    </div>
+                    <div style={{fontSize:"11px",color:C.muted,marginTop:"2px"}}>{s.callTime}{s.endTime?`–${s.endTime}`:""}{s.location?` · ${s.location}`:""}</div>
+                    {!s.personal && <div style={{fontSize:"11px",color:C.text,marginTop:"4px"}}>{s.crew.length} crew · {s.crew.filter(c=>c.confirmed).length} confirmed</div>}
                   </div>
                 ))}
               </div>
@@ -3799,11 +3826,13 @@ function AvailabilityScreen({state,persist,setScreen,currentUser,embedded}) {
 function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUser}) {
   const [weekStart, setWeekStart] = useState(getWeekStart(new Date()));
 
-  // Managers see every shift; crew only see shifts they're assigned to.
+  // Managers see every shift; crew only see shifts they're assigned to —
+  // plus their own pasted personal entries as time blocks.
   const isManager = !currentUser || currentUser.role==="manager";
   const visibleShifts = isManager
     ? state.shifts
-    : state.shifts.filter(s=>s.crew?.some(c=>c.rosterId===currentUser.id||c.id===currentUser.id));
+    : [...state.shifts.filter(s=>s.crew?.some(c=>c.rosterId===currentUser.id||c.id===currentUser.id)),
+       ...personalAsShifts(state, currentUser)];
 
   // 7 days starting Monday
   const days = Array.from({length:7}, (_,i)=>{
@@ -3865,6 +3894,7 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUs
   };
 
   function gotoShift(s) {
+    if(s.personal){ setScreen("home"); return; } // personal blocks manage on home
     setActiveShiftId(s.id);
     setScreen("shift");
   }
@@ -3965,7 +3995,7 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUs
                   {dayShifts.map((s,si)=>{
                     const pos = shiftPos(s, d);
                     if(!pos) return null;
-                    const col = clientColor(s.client);
+                    const col = s.personal ? C.blue : clientColor(s.client);
                     return (
                       <div key={s.id} onClick={()=>gotoShift(s)} style={{
                         position:"absolute",
@@ -3986,9 +4016,9 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUs
                           {s.client}
                         </div>
                         <div style={{fontSize:"8px",color:"#000",opacity:0.85,marginTop:"1px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                          {s.callTime}–{s.endTime}
+                          {s.callTime}{s.endTime?`–${s.endTime}`:""}
                         </div>
-                        <div style={{fontSize:"8px",color:"#000",opacity:0.75,marginTop:"1px"}}>{s.crew.length} crew · {s.crew.filter(c=>c.confirmed).length}✓</div>
+                        <div style={{fontSize:"8px",color:"#000",opacity:0.75,marginTop:"1px"}}>{s.personal?"personal":`${s.crew.length} crew · ${s.crew.filter(c=>c.confirmed).length}✓`}</div>
                       </div>
                     );
                   })}
