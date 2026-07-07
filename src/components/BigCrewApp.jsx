@@ -2268,9 +2268,26 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
   // Crew's own personal (paste-to-schedule) entries.
   const myPersonalEntries = isManager ? [] :
     (state.personalEntries||[]).filter(pe=>pe.ownerId===currentUser.id||pe.ownerId===currentUser.accountId);
-  const confirmed = activeShift?.crew.filter(c=>c.confirmed).length||0;
-  const total = activeShift?.crew.length||0;
-  const myCrewEntry = activeShift?.crew.find(c=>c.rosterId===currentUser.id||c.id===currentUser.id);
+  const onShift = (s) => s.crew?.some(c=>c.rosterId===currentUser.id||c.id===currentUser.id);
+  // The hero shows the user's genuine NEXT shift: the soonest one (by date +
+  // call time) that hasn't ended yet — an in-progress shift still counts,
+  // finished ones drop off. Not just whatever shift was last assigned/opened.
+  const heroShift = (() => {
+    const nowMs = Date.now();
+    const upcoming = state.shifts
+      .filter(s => onShift(s))
+      .map(s => {
+        const start = parseShiftStart(s.date, s.callTime);
+        const end = start ? getShiftEnd(start, s.endTime) : null;
+        return { s, startMs: start ? start.getTime() : null, endMs: end ? end.getTime() : (start ? start.getTime() : null) };
+      })
+      .filter(x => x.startMs != null && x.endMs >= nowMs)   // not yet ended
+      .sort((a, b) => a.startMs - b.startMs);
+    return upcoming[0]?.s || null;
+  })();
+  const confirmed = heroShift?.crew.filter(c=>c.confirmed).length||0;
+  const total = heroShift?.crew.length||0;
+  const myCrewEntry = heroShift?.crew.find(c=>c.rosterId===currentUser.id||c.id===currentUser.id);
 
   // Per-device dismissed notification tracking
   const [dismissed, setDismissed] = useState(() => {
@@ -2343,15 +2360,15 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
           <ManagerOpsOverview state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>
         )}
 
-        {/* Next Shift Hero — only when the user is personally on this shift */}
-        {activeShift && myCrewEntry && (
+        {/* Next Shift Hero — the user's soonest upcoming shift */}
+        {heroShift && myCrewEntry && (
           <div style={{background:C.goldBg,border:`1.5px solid ${C.gold}`,borderRadius:"12px",padding:"16px",marginBottom:"12px",cursor:"pointer"}}
-            onClick={()=>setScreen("shift")}>
+            onClick={()=>{setActiveShiftId(heroShift.id);setScreen("shift");}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
               <div>
                 <span style={lbl}>Your Next Shift</span>
-                <div style={{fontFamily:C.head,fontSize:"26px",letterSpacing:"0.06em",color:C.gold,lineHeight:1}}>{activeShift.client}</div>
-                <div style={{fontSize:"11px",color:C.muted,marginTop:"4px"}}>{activeShift.date} · {activeShift.callTime}–{activeShift.endTime}{shiftScheduledHours(activeShift)!=null?` · ${shiftScheduledHours(activeShift)}h`:""}</div>
+                <div style={{fontFamily:C.head,fontSize:"26px",letterSpacing:"0.06em",color:C.gold,lineHeight:1}}>{heroShift.client}</div>
+                <div style={{fontSize:"11px",color:C.muted,marginTop:"4px"}}>{heroShift.date} · {heroShift.callTime}–{heroShift.endTime}{shiftScheduledHours(heroShift)!=null?` · ${shiftScheduledHours(heroShift)}h`:""}</div>
               </div>
               <div style={{textAlign:"right"}}>
                 <div style={{fontSize:"28px",fontWeight:"700",color:confirmed===total&&total>0?C.green:C.gold}}>{confirmed}/{total}</div>
@@ -2360,16 +2377,16 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
             </div>
             {/* Status + fill pills */}
             <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"10px"}}>
-              <StatusBadge status={deriveShiftStatus(activeShift)}/>
-              <FillBadge shift={activeShift}/>
+              <StatusBadge status={deriveShiftStatus(heroShift)}/>
+              <FillBadge shift={heroShift}/>
             </div>
             <div style={{background:C.border,borderRadius:"4px",height:"3px",overflow:"hidden",marginBottom:"10px"}}>
               <div style={{height:"100%",background:confirmed===total&&total>0?C.green:"#E8C84A",width:`${total>0?(confirmed/total)*100:0}%`,transition:"width 0.5s ease",borderRadius:"4px"}}/>
             </div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{fontSize:"11px",color:C.muted}}>📍 {activeShift.location} · Tap for details →</div>
-              {activeShift.lastUpdated && activeShift.lastUpdated !== activeShift.createdAt && (
-                <LastUpdatedBadge timestamp={activeShift.lastUpdated} by={activeShift.updatedBy}/>
+              <div style={{fontSize:"11px",color:C.muted}}>📍 {heroShift.location} · Tap for details →</div>
+              {heroShift.lastUpdated && heroShift.lastUpdated !== heroShift.createdAt && (
+                <LastUpdatedBadge timestamp={heroShift.lastUpdated} by={heroShift.updatedBy}/>
               )}
             </div>
             {myCrewEntry && !myCrewEntry.confirmed && !myCrewEntry.declined && (
