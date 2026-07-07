@@ -757,27 +757,27 @@ function ordinal(n) {
 }
 
 // ─── NY / NYC / FEDERAL / SE TAX CALCULATOR ──────────────────────────────────
-// IMPORTANT: These brackets are based on 2024 tax year (most recent fully-published).
-// 2025 and 2026 brackets are inflation-adjusted annually by the IRS, NY, and NYC.
-// VERIFY at irs.gov, tax.ny.gov, and nyc.gov/finance before relying on these for filing.
+// IMPORTANT: These brackets are the 2025 tax year (filed early 2026 — the most
+// recent fully-published figures). Inflation-adjusted annually by the IRS, NY,
+// and NYC. VERIFY at irs.gov, tax.ny.gov, and nyc.gov/finance before filing.
 // Single-filer brackets only. For married/HoH, calculations differ significantly.
 
-const TAX_DATA_YEAR = 2024;
+const TAX_DATA_YEAR = 2025;
 
-// Federal single-filer brackets 2024
-const FED_BRACKETS_SINGLE_2024 = [
-  [11600, 0.10],
-  [47150, 0.12],
-  [100525, 0.22],
-  [191950, 0.24],
-  [243725, 0.32],
-  [609350, 0.35],
+// Federal single-filer brackets 2025 (IRS Rev. Proc. 2024-40)
+const FED_BRACKETS_SINGLE_2025 = [
+  [11925, 0.10],
+  [48475, 0.12],
+  [103350, 0.22],
+  [197300, 0.24],
+  [250525, 0.32],
+  [626350, 0.35],
   [Infinity, 0.37],
 ];
-const FED_STD_DEDUCTION_SINGLE_2024 = 14600;
+const FED_STD_DEDUCTION_SINGLE_2025 = 15000;
 
-// NY State single-filer brackets 2024 (approximate)
-const NY_STATE_BRACKETS_SINGLE_2024 = [
+// NY State single-filer brackets 2025 (thresholds unchanged from 2024)
+const NY_STATE_BRACKETS_SINGLE_2025 = [
   [8500, 0.04],
   [11700, 0.045],
   [13900, 0.0525],
@@ -789,8 +789,8 @@ const NY_STATE_BRACKETS_SINGLE_2024 = [
   [Infinity, 0.109],
 ];
 
-// NYC resident single-filer brackets 2024 (approximate)
-const NYC_BRACKETS_SINGLE_2024 = [
+// NYC resident single-filer brackets 2025 (unchanged)
+const NYC_BRACKETS_SINGLE_2025 = [
   [12000, 0.03078],
   [25000, 0.03762],
   [50000, 0.03819],
@@ -800,7 +800,7 @@ const NYC_BRACKETS_SINGLE_2024 = [
 // Self-employment tax: 12.4% Social Security up to wage base + 2.9% Medicare on all
 const SE_SS_RATE = 0.124;
 const SE_MEDICARE_RATE = 0.029;
-const SE_WAGE_BASE_2024 = 168600;
+const SE_WAGE_BASE_2025 = 176100;
 const SE_NET_ADJUSTMENT = 0.9235; // 92.35% — accounts for half of SE tax as expense
 
 function calcTaxBracket(income, brackets) {
@@ -821,7 +821,7 @@ function calcTaxBracket(income, brackets) {
 function calcSETax(netSE) {
   if (netSE <= 0) return { ss:0, medicare:0, total:0, halfDeductible:0 };
   const taxable = netSE * SE_NET_ADJUSTMENT;
-  const ss = Math.min(taxable, SE_WAGE_BASE_2024) * SE_SS_RATE;
+  const ss = Math.min(taxable, SE_WAGE_BASE_2025) * SE_SS_RATE;
   const medicare = taxable * SE_MEDICARE_RATE;
   const total = ss + medicare;
   return { ss, medicare, total, halfDeductible: total / 2 };
@@ -834,15 +834,15 @@ function calcNYCTax(grossIncome, businessExpenses, mileageDeduction) {
   // Half of SE tax is deductible as adjustment to income
   const adjustedIncome = netSelfEmployment - seTax.halfDeductible;
   // Subtract standard deduction for federal
-  const fedTaxable = Math.max(0, adjustedIncome - FED_STD_DEDUCTION_SINGLE_2024);
-  const federal = calcTaxBracket(fedTaxable, FED_BRACKETS_SINGLE_2024);
+  const fedTaxable = Math.max(0, adjustedIncome - FED_STD_DEDUCTION_SINGLE_2025);
+  const federal = calcTaxBracket(fedTaxable, FED_BRACKETS_SINGLE_2025);
   // NY state taxable income — NY uses federal AGI as starting point, similar standard deduction
-  // 2024 NY single standard deduction was approximately $8,000
+  // NY single standard deduction (2025) is $8,000
   const nyStdDeduction = 8000;
   const nyTaxable = Math.max(0, adjustedIncome - nyStdDeduction);
-  const nyState = calcTaxBracket(nyTaxable, NY_STATE_BRACKETS_SINGLE_2024);
+  const nyState = calcTaxBracket(nyTaxable, NY_STATE_BRACKETS_SINGLE_2025);
   // NYC tax — same starting point, no separate standard deduction in NYC
-  const nyc = calcTaxBracket(nyTaxable, NYC_BRACKETS_SINGLE_2024);
+  const nyc = calcTaxBracket(nyTaxable, NYC_BRACKETS_SINGLE_2025);
   const totalTax = seTax.total + federal + nyState + nyc;
   const effectiveRate = grossIncome > 0 ? totalTax / grossIncome : 0;
   return {
@@ -971,8 +971,8 @@ function buildPrintableReport(year, yt, tax, allEntries, currentUser) {
   }
 
   html += `<div class="footer">
-    <strong>Disclaimer:</strong> This is an estimate based on 2024 IRS, New York State, and NYC tax brackets for a single filer. Brackets change yearly and your actual liability may differ.
-    Self-employment tax is calculated on 92.35% of net SE income (the SE adjustment), with 12.4% Social Security (capped at the $${SE_WAGE_BASE_2024.toLocaleString()} wage base) and 2.9% Medicare.
+    <strong>Disclaimer:</strong> This is an estimate based on 2025 IRS, New York State, and NYC tax brackets for a single filer. Brackets change yearly and your actual liability may differ.
+    Self-employment tax is calculated on 92.35% of net SE income (the SE adjustment), with 12.4% Social Security (capped at the $${SE_WAGE_BASE_2025.toLocaleString()} wage base) and 2.9% Medicare.
     Half of the SE tax is deductible against your federal AGI. <strong>Verify all numbers with a CPA before filing</strong>. IRS mileage rate used: $${IRS_MILEAGE_RATE}/mile.
     <br><br>Generated by BigCrew NYC App · ${new Date().toLocaleString()}
   </div>
@@ -6371,7 +6371,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
             <div style={{background:"rgba(249,115,22,0.1)",border:`1px solid #F97316`,borderRadius:"10px",padding:"12px 14px",marginBottom:"14px"}}>
               <div style={{fontSize:"10px",color:"#F97316",fontWeight:"700",letterSpacing:"0.12em",marginBottom:"4px"}}>1099-NEC · NEW YORK, NY · SINGLE FILER</div>
               <div style={{fontSize:"11px",color:C.muted,lineHeight:"1.6"}}>
-                Estimate covers Federal + NY State + NYC + Self-Employment tax based on <b style={{color:C.text}}>2024 brackets</b>. Brackets change yearly — verify with a CPA before filing. Married/HoH or non-resident filers will see different numbers.
+                Estimate covers Federal + NY State + NYC + Self-Employment tax based on <b style={{color:C.text}}>2025 brackets</b>. Brackets change yearly — verify with a CPA before filing. Married/HoH or non-resident filers will see different numbers.
               </div>
             </div>
 
@@ -6398,7 +6398,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
                 <div style={{...card({border:`1.5px solid #F97316`,marginBottom:"14px"})}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
                     <span style={lbl}>📋 Detailed Tax Breakdown (NYC)</span>
-                    <span style={{fontSize:"9px",color:C.dim,letterSpacing:"0.08em"}}>2024 BRACKETS</span>
+                    <span style={{fontSize:"9px",color:C.dim,letterSpacing:"0.08em"}}>2025 BRACKETS</span>
                   </div>
 
                   {/* Self-employment tax */}
@@ -6532,7 +6532,7 @@ function ExpenseScreen({state, persist, setScreen, currentUser}) {
               <div style={{fontSize:"9px",color:C.dim,textAlign:"center",marginTop:"8px",lineHeight:"1.5"}}>
                 <b>PDF:</b> opens print dialog → "Save as PDF" (works on all devices).<br/>
                 <b>Google Doc:</b> copies text to clipboard, opens blank doc — just paste (Cmd/Ctrl+V).<br/>
-                IRS mileage rate: ${IRS_MILEAGE_RATE}/mi · 2024 tax brackets · Single filer
+                IRS mileage rate: ${IRS_MILEAGE_RATE}/mi · 2025 tax brackets · Single filer
               </div>
             </div>
           </div>
