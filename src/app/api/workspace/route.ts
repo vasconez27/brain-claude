@@ -187,20 +187,28 @@ function mergeCrewWrite(server: Rec, client: Rec, ownIds: Set<string>, accountId
 }
 
 // Three-way merge for MANAGER writes so two managers editing different
-// shifts don't clobber each other. Uses the version the client last loaded
-// (baseMs) to tell a concurrent add (keep) from an intentional delete (drop).
-function mergeManagerWrite(server: Rec, client: Rec, baseMs: number): Rec {
+// shifts don't clobber each other. Deletions are carried by EXPLICIT
+// tombstones (removedShiftIds / removedIdentities), never inferred from
+// timestamps — inference resurrected deleted shifts whenever crew activity
+// had touched them after the deleting manager's load.
+function mergeManagerWrite(server: Rec, client: Rec): Rec {
   const merged: Rec = { ...client };
   const ts = (v: unknown) => {
     const t = v ? new Date(v as string).getTime() : 0;
     return isNaN(t) ? 0 : t;
   };
+  const strArr = (v: unknown) => (Array.isArray(v) ? (v as string[]) : []);
 
-  // Shifts: union by id. In both → newer lastUpdated wins. Only on server →
-  // keep if it changed after the client's base (another manager added/edited
-  // it); drop if it's older than base (this client intentionally deleted it).
-  const clientShifts = Array.isArray(client.shifts) ? (client.shifts as Rec[]) : [];
-  const serverShifts = Array.isArray(server.shifts) ? (server.shifts as Rec[]) : [];
+  // Shift tombstones: union of both sides, capped.
+  const shiftTombs = new Set([...strArr(server.removedShiftIds), ...strArr(client.removedShiftIds)]);
+  merged.removedShiftIds = [...shiftTombs].slice(-300);
+
+  // Shifts: union by id, minus tombstoned. In both → newer lastUpdated wins.
+  // Only on server → kept (concurrent add/edit) unless tombstoned. Only on
+  // client → kept (this manager just created it) unless another manager
+  // deleted it (server tombstone).
+  const clientShifts = (Array.isArray(client.shifts) ? (client.shifts as Rec[]) : []).filter(s => !shiftTombs.has(s.id as string));
+  const serverShifts = (Array.isArray(server.shifts) ? (server.shifts as Rec[]) : []).filter(s => !shiftTombs.has(s.id as string));
   const clientById = new Map(clientShifts.map(s => [s.id, s]));
   const out: Rec[] = clientShifts.map(cs => {
     const ss = serverShifts.find(s => s.id === cs.id);
@@ -208,11 +216,42 @@ function mergeManagerWrite(server: Rec, client: Rec, baseMs: number): Rec {
     return cs;
   });
   for (const ss of serverShifts) {
-    if (clientById.has(ss.id)) continue;
-    const changedAfterBase = ts(ss.lastUpdated) > baseMs || ts(ss.createdAt) > baseMs;
-    if (changedAfterBase) out.push(ss); // concurrent add/edit by another manager
+    if (!clientById.has(ss.id)) out.push(ss); // concurrent add by another manager
   }
   merged.shifts = out;
+
+  // Roster tombstones: union both sides; a roster entry matching any
+  // tombstone (by roster id, account id, linked id, or email) stays deleted
+  // regardless of which side's stale payload still carries it. Intentional
+  // re-adds cleared the client tombstone AND use a fresh id, so they pass.
+  const clientTombs = Array.isArray(client.removedIdentities) ? (client.removedIdentities as Rec[]) : [];
+  const serverTombs = Array.isArray(server.removedIdentities) ? (server.removedIdentities as Rec[]) : [];
+  const tombKey = (t: Rec) => `${t.rosterId ?? ""}|${t.userId ?? ""}|${(t.email as string ?? "").toLowerCase()}`;
+  const tombMap = new Map<string, Rec>();
+  for (const t of [...serverTombs, ...clientTombs]) tombMap.set(tombKey(t), t);
+  const clientRosterAll = Array.isArray(client.roster) ? (client.roster as Rec[]) : [];
+  const rosterMatchesTomb = (r: Rec, t: Rec) =>
+    t.rosterId === r.id ||
+    (t.userId && (t.userId === r.userId || strArr(r.linkedUserIds).includes(t.userId as string))) ||
+    (t.email && r.email && (t.email as string).toLowerCase() === (r.email as string).toLowerCase());
+  // Deliberate RE-ADD vs stale carry-over: a re-add is a NEW entry (fresh id,
+  // different from the tombstone's rosterId) whose tombstone the client also
+  // cleared. A stale save still carries the ORIGINAL entry id and the
+  // tombstone survives it.
+  const isReadd = (t: Rec) =>
+    !clientTombs.some(ct => tombKey(ct) === tombKey(t)) &&
+    clientRosterAll.some(r => r.id !== t.rosterId && rosterMatchesTomb(r, t));
+  const activeTombs = [...tombMap.values()].filter(t => !isReadd(t));
+  merged.removedIdentities = activeTombs.slice(-300);
+  const tombstonedEntry = (r: Rec) => activeTombs.some(t => rosterMatchesTomb(r, t));
+
+  // Roster: union by id minus tombstoned — a stale save can't drop people
+  // (server extras kept) and can't resurrect deleted ones (tombstones win).
+  const clientRoster = clientRosterAll.filter(r => !tombstonedEntry(r));
+  const clientRosterIds = new Set(clientRoster.map(r => r.id));
+  const serverRosterExtra = (Array.isArray(server.roster) ? (server.roster as Rec[]) : [])
+    .filter(r => !clientRosterIds.has(r.id) && !tombstonedEntry(r));
+  merged.roster = [...clientRoster, ...serverRosterExtra];
 
   // Notifications: union by id (never lose another manager's/crew's alerts),
   // newest first, same 60 cap.
@@ -220,14 +259,6 @@ function mergeManagerWrite(server: Rec, client: Rec, baseMs: number): Rec {
   const serverExtra = (Array.isArray(server.notifications) ? (server.notifications as Rec[]) : []).filter(n => !known.has(n.id));
   merged.notifications = [...(Array.isArray(client.notifications) ? (client.notifications as Rec[]) : []), ...serverExtra]
     .sort((a, b) => ts(b.ts) - ts(a.ts)).slice(0, 60);
-
-  // Roster: union by id — keep every server entry the client's payload lacks
-  // (a concurrent manager's roster addition, or an account-merged crew), so a
-  // stale save can't drop people. Client's version wins for entries in both.
-  const clientRoster = Array.isArray(client.roster) ? (client.roster as Rec[]) : [];
-  const clientRosterIds = new Set(clientRoster.map(r => r.id));
-  const serverRosterExtra = (Array.isArray(server.roster) ? (server.roster as Rec[]) : []).filter(r => !clientRosterIds.has(r.id));
-  merged.roster = [...clientRoster, ...serverRosterExtra];
 
   // Expenses: union by id — never drop another user's expense entries.
   const clientExp = Array.isArray(client.expenses) ? (client.expenses as Rec[]) : [];
@@ -262,9 +293,8 @@ export async function PUT(req: Request) {
   }
 
   const client = data as Rec;
-  // Pull out the client's base version (what it last loaded), then drop the
-  // marker so it never gets persisted into the document.
-  const baseMs = client._baseUpdatedAt ? new Date(client._baseUpdatedAt as string).getTime() : 0;
+  // Drop the client's version marker so it never persists into the document.
+  // (Deletion intent is carried by explicit tombstones now, not timestamps.)
   delete client._baseUpdatedAt;
 
   let toSave = client;
@@ -288,7 +318,7 @@ export async function PUT(req: Request) {
     toSave = mergeCrewWrite(server, client, ownIds, session.user.id);
   } else {
     // Manager: three-way merge so a concurrent manager's edits survive.
-    toSave = mergeManagerWrite(server, client, isNaN(baseMs) ? 0 : baseMs);
+    toSave = mergeManagerWrite(server, client);
   }
 
   const ws = await prisma.workspace.upsert({

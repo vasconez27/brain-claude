@@ -1008,6 +1008,9 @@ const INIT = {
   removedIdentities: [],
   // Manager-added custom role tags beyond the defaults
   customRoleTags: [],
+  // Shift ids managers intentionally deleted — merge tombstones so a
+  // concurrent manager's stale save can't resurrect them.
+  removedShiftIds: [],
   // Crew's own personal schedule entries (a second job, an appointment) so
   // they can keep their week straight. Private to each crew member.
   // { id, ownerId, title, date:"MM/DD/YYYY", callTime, endTime, location, notes }
@@ -1691,7 +1694,7 @@ export default function App({ sessionUser = null }) {
       // so what a user sees in-session matches what survives a reload.
       const ns = (raw.notifications||[]).length > 60
         ? { ...raw, notifications: raw.notifications.slice(0,60) } : raw;
-      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[],personalEntries:ns.personalEntries||[]});
+      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[],personalEntries:ns.personalEntries||[],removedShiftIds:ns.removedShiftIds||[]});
       return ns;
     });
   },[flush]);
@@ -1842,7 +1845,7 @@ export default function App({ sessionUser = null }) {
       // notification can't get separated by a poll landing between two saves.
       const ns = { ...prevState, shifts: newShifts,
         notifications: extraNotifs?.length ? [...extraNotifs, ...prevState.notifications] : prevState.notifications };
-      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[],personalEntries:ns.personalEntries||[]});
+      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[],personalEntries:ns.personalEntries||[],removedShiftIds:ns.removedShiftIds||[]});
       return ns;
     });
   },[flush]);
@@ -1875,7 +1878,7 @@ export default function App({ sessionUser = null }) {
   else if(effectiveScreen==="reports") body = <ReportsScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
   else body = <HomeScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} setCurrentUser={setCurrentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
 
-  return <>{body}<ThemeToggle theme={theme} setTheme={setTheme}/>{saveError && <SaveErrorBanner onRetry={()=>{ setSaveError(false); flush({roster:state.roster,shifts:state.shifts,notifications:state.notifications,availability:state.availability,expenses:state.expenses||[],customRoleTags:state.customRoleTags||[],removedIdentities:state.removedIdentities||[],personalEntries:state.personalEntries||[]}); }} onDismiss={()=>setSaveError(false)}/>}</>;
+  return <>{body}<ThemeToggle theme={theme} setTheme={setTheme}/>{saveError && <SaveErrorBanner onRetry={()=>{ setSaveError(false); flush({roster:state.roster,shifts:state.shifts,notifications:state.notifications,availability:state.availability,expenses:state.expenses||[],customRoleTags:state.customRoleTags||[],removedIdentities:state.removedIdentities||[],personalEntries:state.personalEntries||[],removedShiftIds:state.removedShiftIds||[]}); }} onDismiss={()=>setSaveError(false)}/>}</>;
 }
 
 // Shown when a write to the shared workspace fails, so a user never thinks an
@@ -2616,7 +2619,8 @@ function ShiftScreen({state, persist, updateShift, setScreen, currentUser, activ
   }
   function removeShift() {
     if(!window.confirm(`Remove "${activeShift.client}" on ${activeShift.date}? This deletes the shift for everyone.`)) return;
-    persist({...state, shifts: state.shifts.filter(s=>s.id!==activeShift.id)});
+    persist({...state, shifts: state.shifts.filter(s=>s.id!==activeShift.id),
+      removedShiftIds: [...(state.removedShiftIds||[]), activeShift.id].slice(-300)});
     setScreen("home");
   }
 
@@ -4659,7 +4663,8 @@ function AdminShiftsTab({state,persist,updateShift,setScreen,setActiveShiftId,ac
     if(state.shifts.length<=1) return;
     if(!confirm("Delete this shift permanently?")) return;
     const newShifts=state.shifts.filter(s=>s.id!==id);
-    persist({...state,shifts:newShifts});
+    persist({...state,shifts:newShifts,
+      removedShiftIds:[...(state.removedShiftIds||[]), id].slice(-300)});
     if(activeShift.id===id) setActiveShiftId(newShifts[0].id);
   }
 
@@ -4841,7 +4846,11 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
   function addMember(){
     if(!form.name.trim()) return;
     const member={id:uid(),...form,available:true,active:true,tags:[]};
-    persist({...state,roster:[...state.roster,member]});
+    // Re-adding someone clears their deletion tombstone (matched by email)
+    // so their account can bind again.
+    const em=(form.email||"").toLowerCase();
+    const tombs=(state.removedIdentities||[]).filter(t=>!(em && t.email && t.email.toLowerCase()===em));
+    persist({...state,roster:[...state.roster,member],removedIdentities:tombs});
     setForm({name:"",role:"Crew",position:"",phone:"",email:"",pin:"0000",notes:""});
     setAdding(false);
   }
@@ -4877,7 +4886,8 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
     // the person's next login self-registers them right back onto the roster.
     const tombs = gone ? [
       ...(state.removedIdentities||[]),
-      { userId: gone.userId || undefined,
+      { rosterId: gone.id,
+        userId: gone.userId || undefined,
         linkedUserIds: gone.linkedUserIds || [],
         email: gone.email || undefined,
         name: gone.name || undefined,
@@ -5145,7 +5155,9 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
     const member = { id: uid(), name, role:"Crew", position: quickForm.position.trim()||"Crew",
       phone: quickForm.phone.trim(), email: quickForm.email.trim(), pin:"",
       available:true, active:true, notes:"", tags:[] };
-    persist(prev => ({...prev, roster:[...prev.roster, member]}));
+    const em=member.email.toLowerCase();
+    persist(prev => ({...prev, roster:[...prev.roster, member],
+      removedIdentities:(prev.removedIdentities||[]).filter(t=>!(em && t.email && t.email.toLowerCase()===em))}));
     setSelectedCrew(prev=>[...prev,{rosterId:member.id,roleTag:null}]);
     setShowQuickAdd(false); setQuickForm({name:"",position:"",phone:"",email:""});
   }
