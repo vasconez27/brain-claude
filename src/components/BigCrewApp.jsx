@@ -993,6 +993,30 @@ const DEFAULT_ROLE_TAGS = [
   {code:"SL OP", label:"Scissor Lift Op", color:"#F97316"},
 ];
 
+// Guarantee every collection the UI iterates is an array, so a shift missing
+// tasks/announcements/crew (legacy or imported data) can never crash a `.filter`
+// or `.map`. Applied wherever server data enters state (initial load + poll).
+function normalizeData(data) {
+  if (!data || typeof data !== "object") return data;
+  return {
+    ...data,
+    shifts: (Array.isArray(data.shifts) ? data.shifts : []).map(s => ({
+      ...s,
+      crew: Array.isArray(s.crew) ? s.crew : [],
+      tasks: Array.isArray(s.tasks) ? s.tasks : [],
+      announcements: Array.isArray(s.announcements) ? s.announcements : [],
+      scope: Array.isArray(s.scope) ? s.scope : [],
+    })),
+    roster: Array.isArray(data.roster) ? data.roster : [],
+    notifications: Array.isArray(data.notifications) ? data.notifications : [],
+    expenses: Array.isArray(data.expenses) ? data.expenses : [],
+    personalEntries: Array.isArray(data.personalEntries) ? data.personalEntries : [],
+    removedIdentities: Array.isArray(data.removedIdentities) ? data.removedIdentities : [],
+    removedShiftIds: Array.isArray(data.removedShiftIds) ? data.removedShiftIds : [],
+    customRoleTags: Array.isArray(data.customRoleTags) ? data.customRoleTags : [],
+  };
+}
+
 const INIT = {
   roster: DEFAULT_ROSTER,
   shifts: [],
@@ -1636,7 +1660,7 @@ export default function App({ sessionUser = null }) {
 
   useEffect(()=>{
     load().then(res=>{
-      if(res?.data){ setState(s=>({...INIT,...res.data})); lastServerUpdatedAtRef.current = res.updatedAt; }
+      if(res?.data){ setState(s=>({...INIT,...normalizeData(res.data)})); lastServerUpdatedAtRef.current = res.updatedAt; }
       setLoaded(true);
     });
   },[]);
@@ -1655,7 +1679,7 @@ export default function App({ sessionUser = null }) {
       const seen = lastServerUpdatedAtRef.current ? new Date(lastServerUpdatedAtRef.current).getTime() : 0;
       if(srv && seen && srv <= seen) return;
       lastServerUpdatedAtRef.current = res.updatedAt || lastServerUpdatedAtRef.current;
-      setState(s=>({...INIT,...res.data}));
+      setState(s=>({...INIT,...normalizeData(res.data)}));
     }, 12000);
     return ()=>clearInterval(t);
   },[loaded]);
@@ -2831,14 +2855,14 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state,persist}) {
     const ann={id:uid(),text:msg.trim(),ts:now(),from:"Management",expiresAt:expMs?now()+expMs:null,duration};
     // Scope the alert to the crew on THIS shift, not every crew member in the app.
     const notif={id:uid(),to:"shift",toIds:(shift.crew||[]).map(c=>c.rosterId||c.id),text:msg.trim(),ts:now(),shiftId:shift.id};
-    persist({...state,shifts:state.shifts.map(s=>s.id===shift.id?{...s,announcements:[ann,...s.announcements],lastUpdated:now()}:s),notifications:[notif,...state.notifications]});
+    persist({...state,shifts:state.shifts.map(s=>s.id===shift.id?{...s,announcements:[ann,...(s.announcements||[])],lastUpdated:now()}:s),notifications:[notif,...state.notifications]});
     setMsg("");setDuration("forever");
   }
   function isExpired(a){return a.expiresAt&&Date.now()>a.expiresAt;}
   function timeLeft(a){if(!a.expiresAt)return null;const ms=a.expiresAt-Date.now();if(ms<=0)return"expired";const h=ms/3600000;if(h<1)return`${Math.ceil(ms/60000)}m left`;if(h<24)return`${Math.ceil(h)}h left`;return`${Math.ceil(h/24)}d left`;}
 
   const durationOpts=[{key:"1h",label:"1h"},{key:"4h",label:"4h"},{key:"24h",label:"24h"},{key:"7d",label:"7d"},{key:"forever",label:"∞"}];
-  const activeAnnouncements = shift.announcements.filter(a=>!isExpired(a));
+  const activeAnnouncements = (shift.announcements||[]).filter(a=>!isExpired(a));
   return (
     <div style={{display:"flex",flexDirection:"column",gap:"10px",animation:"fadeUp 0.3s ease"}}>
       {/* Status + fill */}
@@ -3060,12 +3084,13 @@ function BriefTab({shift,me,onConfirm,onDecline,isManager,state,persist}) {
 
 function TasksTab({shift,onToggle,state,persist,isManager}) {
   const [newTask,setNewTask]=useState("");
-  const done = shift.tasks.filter(t=>t.done).length;
+  const tasks = shift.tasks || [];
+  const done = tasks.filter(t=>t.done).length;
 
   function addTask() {
     if(!newTask.trim()) return;
     const t = {id:uid(),text:newTask.trim(),done:false,addedAt:now()};
-    persist({...state,shifts:state.shifts.map(s=>s.id===shift.id?{...s,tasks:[...s.tasks,t]}:s)});
+    persist({...state,shifts:state.shifts.map(s=>s.id===shift.id?{...s,tasks:[...(s.tasks||[]),t]}:s)});
     setNewTask("");
   }
 
@@ -3073,21 +3098,21 @@ function TasksTab({shift,onToggle,state,persist,isManager}) {
     <div style={{animation:"fadeUp 0.3s ease"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
         <span style={lbl}>Progress</span>
-        <div style={{fontSize:"13px",fontWeight:"700",color:done===shift.tasks.length&&shift.tasks.length>0?C.green:C.gold}}>{done}/{shift.tasks.length}</div>
+        <div style={{fontSize:"13px",fontWeight:"700",color:done===tasks.length&&tasks.length>0?C.green:C.gold}}>{done}/{tasks.length}</div>
       </div>
       <div style={{background:C.border,borderRadius:"4px",height:"3px",marginBottom:"14px",overflow:"hidden"}}>
-        <div style={{height:"100%",background:done===shift.tasks.length&&shift.tasks.length>0?C.green:"#E8C84A",width:`${shift.tasks.length>0?(done/shift.tasks.length)*100:0}%`,transition:"width 0.4s ease",borderRadius:"4px"}}/>
+        <div style={{height:"100%",background:done===tasks.length&&tasks.length>0?C.green:"#E8C84A",width:`${tasks.length>0?(done/tasks.length)*100:0}%`,transition:"width 0.4s ease",borderRadius:"4px"}}/>
       </div>
 
       {/* Scope as tasks */}
       <span style={{...lbl,marginBottom:"8px"}}>Scope Tasks</span>
       <div style={{display:"flex",flexDirection:"column",gap:"6px",marginBottom:"14px"}}>
         {shift.scope.map((item,i)=>{
-          const task = shift.tasks.find(t=>t.text===item);
+          const task = tasks.find(t=>t.text===item);
           return (
             <div key={i} onClick={()=>{
               if(task){onToggle(task.id);}
-              else{const t={id:uid(),text:item,done:true,addedAt:now()};persist({...state,shifts:state.shifts.map(s=>s.id===shift.id?{...s,tasks:[...s.tasks,t]}:s)});}
+              else{const t={id:uid(),text:item,done:true,addedAt:now()};persist({...state,shifts:state.shifts.map(s=>s.id===shift.id?{...s,tasks:[...(s.tasks||[]),t]}:s)});}
             }} style={{...card({display:"flex",alignItems:"center",gap:"10px",cursor:"pointer",background:task?.done?C.greenBg:C.s1,border:`1px solid ${task?.done?C.green:C.border}`})}} >
               <div style={{width:"20px",height:"20px",borderRadius:"4px",background:task?.done?C.green:C.s2,border:`1.5px solid ${task?.done?C.green:C.borderHi}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",color:"#000",flexShrink:0}}>{task?.done?"✓":""}</div>
               <div style={{fontSize:"12px",color:task?.done?C.green:C.text,textDecoration:task?.done?"line-through":"none"}}>{item}</div>
@@ -3106,11 +3131,11 @@ function TasksTab({shift,onToggle,state,persist,isManager}) {
         </div>
       )}
 
-      {shift.tasks.filter(t=>!shift.scope.includes(t.text)).length>0&&(
+      {tasks.filter(t=>!(shift.scope||[]).includes(t.text)).length>0&&(
         <div style={{marginTop:"14px"}}>
           <span style={lbl}>Custom Tasks</span>
           <div style={{display:"flex",flexDirection:"column",gap:"6px",marginTop:"8px"}}>
-            {shift.tasks.filter(t=>!shift.scope.includes(t.text)).map(t=>(
+            {tasks.filter(t=>!(shift.scope||[]).includes(t.text)).map(t=>(
               <div key={t.id} onClick={()=>onToggle(t.id)}
                 style={{...card({display:"flex",alignItems:"center",gap:"10px",cursor:"pointer",background:t.done?C.greenBg:C.s1,border:`1px solid ${t.done?C.green:C.border}`})}}>
                 <div style={{width:"20px",height:"20px",borderRadius:"4px",background:t.done?C.green:C.s2,border:`1.5px solid ${t.done?C.green:C.borderHi}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",color:"#000",flexShrink:0}}>{t.done?"✓":""}</div>
