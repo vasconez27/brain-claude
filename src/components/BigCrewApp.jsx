@@ -2325,7 +2325,13 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
       .map(s => {
         const start = parseShiftStart(s.date, s.callTime);
         const end = start ? getShiftEnd(start, s.endTime) : null;
-        return { s, startMs: start ? start.getTime() : null, endMs: end ? end.getTime() : (start ? start.getTime() : null) };
+        // No/blank end time → treat the shift as running until the end of its
+        // start day, so a shift with no endTime doesn't vanish from the hero
+        // the instant it begins.
+        const endMs = end ? end.getTime()
+          : start ? new Date(start.getFullYear(), start.getMonth(), start.getDate(), 23, 59, 59).getTime()
+          : null;
+        return { s, startMs: start ? start.getTime() : null, endMs };
       })
       .filter(x => x.startMs != null && x.endMs >= nowMs)   // not yet ended
       .sort((a, b) => a.startMs - b.startMs);
@@ -2475,9 +2481,9 @@ function HomeScreen({state, persist, setScreen, currentUser, setCurrentUser, act
         <div style={{display:"flex",flexDirection:"column",gap:"6px",marginTop:"8px"}}>
           {visibleShifts.map(s=>(
             <div key={s.id} onClick={()=>{setActiveShiftId(s.id);setScreen("shift");}}
-              style={{...card({border:`1px solid ${s.id===activeShift?.id?C.gold:C.border}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"})}} >
+              style={{...card({border:`1px solid ${s.id===heroShift?.id?C.gold:C.border}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"})}} >
               <div>
-                <div style={{fontSize:"13px",fontWeight:"700",color:s.id===activeShift?.id?C.gold:C.text}}>{s.client}</div>
+                <div style={{fontSize:"13px",fontWeight:"700",color:s.id===heroShift?.id?C.gold:C.text}}>{s.client}</div>
                 <div style={{fontSize:"10px",color:C.muted,marginTop:"2px"}}>{s.date} · {s.callTime} · {s.location}</div>
                 {isManager && s.crew?.length>0 && (()=>{
                   const conf=s.crew.filter(c=>c.confirmed).length;
@@ -2543,7 +2549,11 @@ function PersonalPasteBox({currentUser, state, persist}) {
     const displayDate = y ? `${m}/${d}/${y}` : (f.date||"");
     const entry = {
       id: uid(), ownerId: currentUser.id, title: f.client || "Personal",
-      date: displayDate, callTime: f.callTime||"", endTime: f.endTime||"",
+      date: displayDate,
+      // Default a missing start to 12:00 AM so the entry is positionable and
+      // shows consistently across the week strip, calendar, and hour grid
+      // (not just the month view + home list).
+      callTime: f.callTime || "12:00 AM", endTime: f.endTime||"",
       location: f.location||"", notes: f.notes||"", ts: now(),
     };
     persist(prev=>({...prev, personalEntries:[...(prev.personalEntries||[]), entry]}));
@@ -3298,8 +3308,16 @@ function HoursScreen({state,persist,updateShift,setScreen,currentUser,activeShif
   const [adjustingMember, setAdjustingMember] = useState(null);
   const [adjustingShift, setAdjustingShift] = useState(null);
 
+  // Hours only count once a shift has actually started — otherwise a crew
+  // member confirming a FUTURE shift (which seeds scheduled hours) would show
+  // those as already worked in Hours & Pay.
+  const hasStarted = (s) => {
+    const st = parseShiftStart(s.date, s.callTime);
+    return st && st.getTime() <= Date.now();
+  };
+
   function getMyEntries() {
-    return state.shifts.flatMap(s =>
+    return state.shifts.filter(hasStarted).flatMap(s =>
       s.crew
         .filter(c => (c.rosterId===currentUser.id || c.id===currentUser.id) && c.confirmed && !c.declined)
         .map(c => ({shift: s, crew: c, hours: calcHours(c.clockIn, c.clockOut, c.manualHours)}))
@@ -3308,7 +3326,7 @@ function HoursScreen({state,persist,updateShift,setScreen,currentUser,activeShif
 
   function getAllCrewHours() {
     const map = {};
-    state.shifts.forEach(s => {
+    state.shifts.filter(hasStarted).forEach(s => {
       s.crew.forEach(c => {
         const h = calcHours(c.clockIn, c.clockOut, c.manualHours);
         if (h.total <= 0 && !c.manualHours) return;
@@ -3884,8 +3902,11 @@ function WeekGridScreen({state, setScreen, setActiveShiftId, embedded, currentUs
   // Build position for a shift block within its day column
   function shiftPos(shift, dayDate) {
     const start = parseShiftStart(shift.date, shift.callTime);
-    const end = start ? getShiftEnd(start, shift.endTime) : null;
-    if(!start || !end) return null;
+    let end = start ? getShiftEnd(start, shift.endTime) : null;
+    if(!start) return null;
+    // No end time → render a default 2-hour block so an entry counted in the
+    // day's stats actually shows on the grid (no phantom shifts).
+    if(!end) end = new Date(start.getTime() + 2*3600000);
     const startH = start.getHours() + start.getMinutes()/60;
     let durH;
     const sameDay = end.toDateString()===start.toDateString();

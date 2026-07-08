@@ -121,17 +121,19 @@ export async function GET() {
   });
 }
 
-// Crew-entry fields a crew member may write on a shift (their own responses
-// and hours; a Crew Captain may also submit hours for the whole crew).
+// Fields a crew member may write on their OWN shift entry.
 const CREW_SELF_FIELDS = [
   "confirmed", "confirmedAt", "declined", "declinedAt",
   "clockIn", "clockOut", "manualHours", "adjustReason",
 ] as const;
+// Fields a Crew Captain may write on OTHER crew's entries — hours only. A CC
+// must not be able to forge teammates' confirmations, declines, or clock times.
+const CC_OTHER_FIELDS = ["manualHours", "adjustReason"] as const;
 
 // Restricted merge for non-manager saves: start from the server's current
 // data and accept only the slices a crew member legitimately writes. A crew
 // session can no longer wipe the roster, delete shifts, or rewrite briefs.
-function mergeCrewWrite(server: Rec, client: Rec, ownIds: Set<string>, accountId: string): Rec {
+function mergeCrewWrite(server: Rec, client: Rec, ownIds: Set<string>, accountId: string, userName: string): Rec {
   const merged: Rec = { ...server };
 
   // Shifts: same set as the server; per shift accept crew-entry self-service
@@ -155,15 +157,25 @@ function mergeCrewWrite(server: Rec, client: Rec, ownIds: Set<string>, accountId
       if (!cc) return sc;
       const isOwn = ownIds.has(sc.rosterId as string) || ownIds.has(sc.id as string);
       if (!isOwn && !isCC) return sc; // only your own entry, unless you're the CC
+      // Own entry → full self-service fields. CC writing a TEAMMATE → hours only
+      // (can't forge their confirm/decline/clock times).
+      const fields: readonly string[] = isOwn ? CREW_SELF_FIELDS : CC_OTHER_FIELDS;
       const upd: Rec = { ...sc };
-      for (const f of CREW_SELF_FIELDS) if (f in cc) upd[f] = cc[f];
+      for (const f of fields) if (f in cc) upd[f] = cc[f];
       return upd;
     });
-    // Announcements: crew may ADD (the CC report posts one) but never edit
-    // or remove the manager's — union by id, client's new ones first.
+    // Announcements: only a crew member ON THIS SHIFT may add one (the CC
+    // report), never edit/remove the manager's. The 'from' and 'ts' are
+    // server-stamped from the authenticated identity so they can't be forged.
+    const onThisShift = (Array.isArray(ss.crew) ? (ss.crew as Rec[]) : [])
+      .some(c => ownIds.has(c.rosterId as string) || ownIds.has(c.id as string));
     const serverAnns = Array.isArray(ss.announcements) ? (ss.announcements as Rec[]) : [];
     const knownAnns = new Set(serverAnns.map(a => a.id));
-    const addedAnns = (Array.isArray(cs.announcements) ? (cs.announcements as Rec[]) : []).filter(a => !knownAnns.has(a.id));
+    const addedAnns = !onThisShift ? [] :
+      (Array.isArray(cs.announcements) ? (cs.announcements as Rec[]) : [])
+        .filter(a => !knownAnns.has(a.id) && typeof a.text === "string" && a.text.length <= 4000)
+        .map(a => ({ id: String(a.id), text: (a.text as string).slice(0, 4000),
+          ts: new Date().toISOString(), from: `${userName || "Crew"}${isCC ? " (CC)" : ""}` }));
     return {
       ...ss,
       crew,
@@ -362,7 +374,7 @@ export async function PUT(req: Request) {
       }
     }
     ownIds.add(session.user.id);
-    toSave = mergeCrewWrite(server, client, ownIds, session.user.id);
+    toSave = mergeCrewWrite(server, client, ownIds, session.user.id, session.user.name || "Crew");
   } else {
     // Manager: three-way merge so a concurrent manager's edits survive.
     toSave = mergeManagerWrite(server, client);
