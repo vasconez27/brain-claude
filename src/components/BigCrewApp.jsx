@@ -5041,7 +5041,7 @@ function AdminRosterTab({state,persist,setScreen,setActiveShiftId}) {
 
   function addMember(){
     if(!form.name.trim()) return;
-    const member={id:uid(),...form,available:true,active:true,tags:[]};
+    const member={id:uid(),...form,available:true,active:true,tags:[],addedAt:now()};
     // Re-adding someone clears their deletion tombstone (matched by email)
     // so their account can bind again.
     const em=(form.email||"").toLowerCase();
@@ -5350,7 +5350,7 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
     }
     const member = { id: uid(), name, role:"Crew", position: quickForm.position.trim()||"Crew",
       phone: quickForm.phone.trim(), email: quickForm.email.trim(), pin:"",
-      available:true, active:true, notes:"", tags:[] };
+      available:true, active:true, notes:"", tags:[], addedAt:now() };
     const em=member.email.toLowerCase();
     persist(prev => ({...prev, roster:[...prev.roster, member],
       removedIdentities:(prev.removedIdentities||[]).filter(t=>!(em && t.email && t.email.toLowerCase()===em))}));
@@ -5360,7 +5360,7 @@ function NewShiftScreen({state,persist,setScreen,setActiveShiftId,currentUser}) 
 
   // Unmatched pasted name → create a roster entry on the spot and select it.
   function addUnmatchedToRoster(u) {
-    const member = { id: uid(), name: u.name, role: "Crew", position: "Crew", phone: "", email: "", pin: "", available: true, active: true, notes: "", tags: [] };
+    const member = { id: uid(), name: u.name, role: "Crew", position: "Crew", phone: "", email: "", pin: "", available: true, active: true, notes: "", tags: [], addedAt: now() };
     persist(prev => ({ ...prev, roster: [...prev.roster, member] }));
     setSelectedCrew(prev => [...prev, { rosterId: member.id, roleTag: u.roleTag || null }]);
     setBriefResult(r => r ? { ...r, matched: [...r.matched, { rosterId: member.id, roleTag: u.roleTag, name: u.name, phone: "" }], unmatched: r.unmatched.filter(x => x !== u) } : r);

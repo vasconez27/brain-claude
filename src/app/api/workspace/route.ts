@@ -293,13 +293,16 @@ function mergeManagerWrite(server: Rec, client: Rec): Rec {
     t.rosterId === r.id ||
     (t.userId && (t.userId === r.userId || strArr(r.linkedUserIds).includes(t.userId as string))) ||
     (t.email && r.email && (t.email as string).toLowerCase() === (r.email as string).toLowerCase());
-  // Deliberate RE-ADD vs stale carry-over: a re-add is a NEW entry (fresh id,
-  // different from the tombstone's rosterId) whose tombstone the client also
-  // cleared. A stale save still carries the ORIGINAL entry id and the
-  // tombstone survives it.
+  // Deliberate RE-ADD vs stale carry-over: a genuine re-add creates a roster
+  // entry AFTER the deletion (addedAt > tombstone.ts). A stale save that
+  // predates the deletion carries the ORIGINAL entry, whose addedAt (if any)
+  // is older than the tombstone. Comparing timestamps — not entry ids —
+  // handles account-derived rows that reuse their id and can't be told apart
+  // by id-difference alone.
+  const tombMs = (t: Rec) => (t.ts ? new Date(t.ts as string).getTime() : 0);
   const isReadd = (t: Rec) =>
-    !clientTombs.some(ct => tombKey(ct) === tombKey(t)) &&
-    clientRosterAll.some(r => r.id !== t.rosterId && rosterMatchesTomb(r, t));
+    clientRosterAll.some(r => rosterMatchesTomb(r, t) &&
+      r.addedAt && new Date(r.addedAt as string).getTime() > tombMs(t));
   const activeTombs = [...tombMap.values()].filter(t => !isReadd(t));
   merged.removedIdentities = activeTombs.slice(-300);
   const tombstonedEntry = (r: Rec) => activeTombs.some(t => rosterMatchesTomb(r, t));
