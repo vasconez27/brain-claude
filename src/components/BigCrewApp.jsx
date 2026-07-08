@@ -4637,9 +4637,9 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
       </div>
 
       <div style={{display:"flex",gap:"3px",padding:"8px 12px",background:C.s1,borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
-        {["overview","crew","shifts","roster"].map(t=>(
+        {["overview","crew","shifts"].map(t=>(
           <button key={t} onClick={()=>setTab(t)} style={{...tabBtn(tab===t),flex:"none",padding:"7px 10px",fontSize:"9px",whiteSpace:"nowrap"}}>
-            {t==="overview"?"📊 Overview":t==="crew"?"👥 Crew":t==="shifts"?"📅 Shifts":"📋 Roster"}
+            {t==="overview"?"📊 Overview":t==="crew"?"👥 Crew":"📅 Shifts"}
           </button>
         ))}
       </div>
@@ -4710,7 +4710,6 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
 
         {tab==="crew"&&<AdminCrewEditTab state={state} persist={persist} activeShift={activeShift}/>}
         {tab==="shifts"&&<AdminShiftsTab state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} setActiveShiftId={setActiveShiftId} activeShift={activeShift} currentUser={currentUser}/>}
-        {tab==="roster"&&<AdminRosterTab state={state} persist={persist} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>}
       </div>
 
       {showGcalGuide && <GoogleCalSetupGuide onClose={()=>setShowGcalGuide(false)}/>}
