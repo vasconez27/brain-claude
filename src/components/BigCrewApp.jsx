@@ -4595,7 +4595,6 @@ function MessageScreen({state,persist,setScreen,activeShift,setActiveShiftId,cur
 // ══════════════════════════════════════════════════════════════════════════════
 function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShift,setActiveShiftId}) {
   const [tab,setTab]=useState("overview");
-  const [showGcalGuide, setShowGcalGuide] = useState(false);
 
   if(!activeShift) return <NoShiftEmptyState title="Admin Panel" setScreen={setScreen}/>;
 
@@ -4693,18 +4692,6 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
               <button onClick={()=>setScreen("message")} style={{...btn("gold"),flex:1}}>📨 BLAST MESSAGE</button>
               {activeShift.status==="active"&&<button onClick={completeShift} style={{...btn("ghost"),flex:1,border:`1px solid ${C.green}`,color:C.green}}>🏁 COMPLETE</button>}
             </div>
-
-            {/* Google Calendar setup */}
-            <div style={{...card({marginTop:"14px",border:`1px solid ${C.blue}`})}}>
-              <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-                <div style={{fontSize:"22px"}}>📅</div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:"12px",fontWeight:"700",color:C.blue}}>Google Calendar Integration</div>
-                  <div style={{fontSize:"10px",color:C.muted,marginTop:"2px",lineHeight:"1.5"}}>Works out of the box via "Add to Calendar". Full OAuth sync requires backend setup.</div>
-                </div>
-                <button onClick={()=>setShowGcalGuide(true)} style={{...btn("ghost"),padding:"6px 12px",fontSize:"10px",border:`1px solid ${C.blue}`,color:C.blue}}>SETUP →</button>
-              </div>
-            </div>
           </div>
         )}
 
@@ -4712,7 +4699,6 @@ function AdminScreen({state,persist,updateShift,setScreen,currentUser,activeShif
         {tab==="shifts"&&<AdminShiftsTab state={state} persist={persist} updateShift={updateShift} setScreen={setScreen} setActiveShiftId={setActiveShiftId} activeShift={activeShift} currentUser={currentUser}/>}
       </div>
 
-      {showGcalGuide && <GoogleCalSetupGuide onClose={()=>setShowGcalGuide(false)}/>}
     </div>
   );
 }
@@ -6724,48 +6710,6 @@ function TaxSavingsCalc({gross, taxable}) {
 // ══════════════════════════════════════════════════════════════════════════════
 // GOOGLE CALENDAR SETUP GUIDE (modal for managers)
 // ══════════════════════════════════════════════════════════════════════════════
-function GoogleCalSetupGuide({onClose}) {
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:C.s1,border:`1.5px solid ${C.gold}`,borderRadius:"12px",padding:"24px",maxWidth:"560px",width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
-          <div style={{fontFamily:C.head,fontSize:"22px",letterSpacing:"0.08em",color:C.gold}}>GOOGLE CALENDAR</div>
-          <button onClick={onClose} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"20px"}}>✕</button>
-        </div>
-
-        <div style={{background:C.greenBg,border:`1px solid ${C.green}`,borderRadius:"8px",padding:"12px",marginBottom:"14px"}}>
-          <div style={{fontSize:"11px",color:C.green,fontWeight:"700",marginBottom:"4px",letterSpacing:"0.08em"}}>✅ WORKING NOW (NO SETUP)</div>
-          <div style={{fontSize:"11px",color:C.text,lineHeight:"1.6"}}>The "📅 Add to Calendar" button on every shift already opens Google Calendar in a new tab with the event pre-filled. Tap → tap "Save" → done. No API keys, no OAuth, no backend.</div>
-        </div>
-
-        <div style={{background:C.blueBg,border:`1px solid ${C.blue}`,borderRadius:"8px",padding:"12px",marginBottom:"14px"}}>
-          <div style={{fontSize:"11px",color:C.blue,fontWeight:"700",marginBottom:"6px",letterSpacing:"0.08em"}}>🔧 FOR FULL TWO-WAY SYNC (REQUIRES BACKEND)</div>
-          <div style={{fontSize:"11px",color:C.text,lineHeight:"1.6",marginBottom:"8px"}}>
-            If you want BigCrew to <b>read</b> the manager's existing Google Calendar events (to spot conflicts) and <b>auto-push</b> every shift to their calendar, you need:
-          </div>
-          <ol style={{fontSize:"11px",color:C.muted,lineHeight:"1.8",paddingLeft:"18px",margin:0}}>
-            <li>A Google Cloud project — <span style={{color:C.blue}}>console.cloud.google.com</span> (free)</li>
-            <li>Enable the <b style={{color:C.text}}>Google Calendar API</b> in that project</li>
-            <li>Create OAuth 2.0 credentials (Client ID + Secret)</li>
-            <li>A backend (Firebase / Supabase / Node.js) to handle OAuth tokens</li>
-            <li>Hook the BigCrew app to that backend's auth endpoint</li>
-          </ol>
-          <div style={{fontSize:"10px",color:C.muted,marginTop:"10px",lineHeight:"1.5"}}>
-            <b style={{color:C.gold}}>Honest note:</b> I'm not certain of exact dev time, but for an experienced developer this is generally a few hours of OAuth wiring. Firebase has a free tier suitable for small teams.
-          </div>
-        </div>
-
-        <div style={{background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:"8px",padding:"12px"}}>
-          <div style={{fontSize:"11px",color:C.gold,fontWeight:"700",marginBottom:"4px",letterSpacing:"0.08em"}}>💡 RECOMMENDATION</div>
-          <div style={{fontSize:"11px",color:C.text,lineHeight:"1.6"}}>For your pitch, the "Add to Calendar" button is more than enough — it's instant and looks polished. Add full OAuth sync once BigCrew commits to deploying. That keeps complexity out of the demo phase.</div>
-        </div>
-
-        <button onClick={onClose} style={{...btn("gold",true),marginTop:"16px"}}>GOT IT</button>
-      </div>
-    </div>
-  );
-}
-
 // ─── GLOBAL STYLES ───────────────────────────────────────────────────────────
 const GS = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap');
