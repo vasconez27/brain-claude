@@ -91,8 +91,32 @@ export async function GET() {
     orderBy: { name: "asc" },
   });
 
+  // Sensitive per-person data (expenses, personal schedule entries) must not
+  // be shipped to other crew members' browsers — the UI hides them, but the
+  // raw blob would still be readable over the network. Scope them to the
+  // requesting crew member server-side. Managers get everything.
+  let scopedExpenses = data.expenses;
+  let scopedPersonal = data.personalEntries;
+  if (session.user.role !== "MANAGER") {
+    const emailLc = (session.user.email ?? "").toLowerCase();
+    const ownIds = new Set<string>([session.user.id]);
+    for (const r of roster) {
+      const linked = Array.isArray(r.linkedUserIds) && (r.linkedUserIds as string[]).includes(session.user.id);
+      const emailMatch = emailLc && typeof r.email === "string" && r.email.toLowerCase() === emailLc;
+      if (r.userId === session.user.id || r.id === session.user.id || linked || emailMatch) {
+        ownIds.add(r.id as string);
+      }
+    }
+    const mine = (ownerLike: unknown) =>
+      ownIds.has(ownerLike as string) || ownerLike === session.user.id;
+    scopedExpenses = (Array.isArray(data.expenses) ? (data.expenses as Rec[]) : [])
+      .filter(e => mine(e.userId) || mine(e.accountId));
+    scopedPersonal = (Array.isArray(data.personalEntries) ? (data.personalEntries as Rec[]) : [])
+      .filter(pe => mine(pe.ownerId));
+  }
+
   return NextResponse.json({
-    data: { ...data, roster, managerContacts: managers },
+    data: { ...data, roster, expenses: scopedExpenses, personalEntries: scopedPersonal, managerContacts: managers },
     updatedAt: ws?.updatedAt ?? null,
   });
 }
