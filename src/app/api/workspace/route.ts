@@ -94,10 +94,13 @@ export async function GET() {
   // Sensitive per-person data (expenses, personal schedule entries) must not
   // be shipped to other crew members' browsers — the UI hides them, but the
   // raw blob would still be readable over the network. Scope them to the
-  // requesting crew member server-side. Managers get everything.
+  // requesting crew member server-side. Managers get everything. Billing
+  // config (client bill rates, item catalog) is manager-only, full stop.
   let scopedExpenses = data.expenses;
   let scopedPersonal = data.personalEntries;
+  let scopedBilling = data.billing;
   if (session.user.role !== "MANAGER") {
+    scopedBilling = undefined;
     const emailLc = (session.user.email ?? "").toLowerCase();
     const ownIds = new Set<string>([session.user.id]);
     for (const r of roster) {
@@ -116,7 +119,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    data: { ...data, roster, expenses: scopedExpenses, personalEntries: scopedPersonal, managerContacts: managers },
+    data: { ...data, roster, expenses: scopedExpenses, personalEntries: scopedPersonal, billing: scopedBilling, managerContacts: managers },
     updatedAt: ws?.updatedAt ?? null,
   });
 }
@@ -314,6 +317,11 @@ function mergeManagerWrite(server: Rec, client: Rec): Rec {
   const serverRosterExtra = (Array.isArray(server.roster) ? (server.roster as Rec[]) : [])
     .filter(r => !clientRosterIds.has(r.id) && !tombstonedEntry(r));
   merged.roster = [...clientRoster, ...serverRosterExtra];
+
+  // Billing config: client's version wins when it carries one (rates editor
+  // saves), otherwise the server's stands so saves from clients that never
+  // loaded billing can't wipe it.
+  merged.billing = client.billing ?? server.billing;
 
   // Notifications: union by id (never lose another manager's/crew's alerts),
   // newest first, same 60 cap.

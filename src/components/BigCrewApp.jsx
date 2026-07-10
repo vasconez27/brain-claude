@@ -1014,6 +1014,7 @@ function normalizeData(data) {
     removedIdentities: Array.isArray(data.removedIdentities) ? data.removedIdentities : [],
     removedShiftIds: Array.isArray(data.removedShiftIds) ? data.removedShiftIds : [],
     customRoleTags: Array.isArray(data.customRoleTags) ? data.customRoleTags : [],
+    billing: data.billing && typeof data.billing === "object" ? data.billing : undefined,
   };
 }
 
@@ -1032,6 +1033,9 @@ const INIT = {
   removedIdentities: [],
   // Manager-added custom role tags beyond the defaults
   customRoleTags: [],
+  // Billing config for the invoice tool (manager-only; server strips it for
+  // crew): { defaultRate, ccPremium, rates: {rosterId: $/hr}, items: [{id,name,price}] }
+  billing: undefined,
   // Shift ids managers intentionally deleted — merge tombstones so a
   // concurrent manager's stale save can't resurrect them.
   removedShiftIds: [],
@@ -1718,7 +1722,7 @@ export default function App({ sessionUser = null }) {
       // so what a user sees in-session matches what survives a reload.
       const ns = (raw.notifications||[]).length > 60
         ? { ...raw, notifications: raw.notifications.slice(0,60) } : raw;
-      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[],personalEntries:ns.personalEntries||[],removedShiftIds:ns.removedShiftIds||[]});
+      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[],personalEntries:ns.personalEntries||[],removedShiftIds:ns.removedShiftIds||[],billing:ns.billing});
       return ns;
     });
   },[flush]);
@@ -1869,7 +1873,7 @@ export default function App({ sessionUser = null }) {
       // notification can't get separated by a poll landing between two saves.
       const ns = { ...prevState, shifts: newShifts,
         notifications: extraNotifs?.length ? [...extraNotifs, ...prevState.notifications] : prevState.notifications };
-      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[],personalEntries:ns.personalEntries||[],removedShiftIds:ns.removedShiftIds||[]});
+      flush({roster:ns.roster,shifts:ns.shifts,notifications:ns.notifications,availability:ns.availability,expenses:ns.expenses||[],customRoleTags:ns.customRoleTags||[],removedIdentities:ns.removedIdentities||[],personalEntries:ns.personalEntries||[],removedShiftIds:ns.removedShiftIds||[],billing:ns.billing});
       return ns;
     });
   },[flush]);
@@ -1902,7 +1906,7 @@ export default function App({ sessionUser = null }) {
   else if(effectiveScreen==="reports") body = <ReportsScreen state={state} setScreen={setScreen} setActiveShiftId={setActiveShiftId}/>;
   else body = <HomeScreen state={state} persist={persist} setScreen={setScreen} currentUser={currentUser} setCurrentUser={setCurrentUser} activeShift={activeShift} setActiveShiftId={setActiveShiftId}/>;
 
-  return <>{body}<ThemeToggle theme={theme} setTheme={setTheme}/>{saveError && <SaveErrorBanner onRetry={()=>{ setSaveError(false); flush({roster:state.roster,shifts:state.shifts,notifications:state.notifications,availability:state.availability,expenses:state.expenses||[],customRoleTags:state.customRoleTags||[],removedIdentities:state.removedIdentities||[],personalEntries:state.personalEntries||[],removedShiftIds:state.removedShiftIds||[]}); }} onDismiss={()=>setSaveError(false)}/>}</>;
+  return <>{body}<ThemeToggle theme={theme} setTheme={setTheme}/>{saveError && <SaveErrorBanner onRetry={()=>{ setSaveError(false); flush({roster:state.roster,shifts:state.shifts,notifications:state.notifications,availability:state.availability,expenses:state.expenses||[],customRoleTags:state.customRoleTags||[],removedIdentities:state.removedIdentities||[],personalEntries:state.personalEntries||[],removedShiftIds:state.removedShiftIds||[],billing:state.billing}); }} onDismiss={()=>setSaveError(false)}/>}</>;
 }
 
 // Shown when a write to the shared workspace fails, so a user never thinks an
