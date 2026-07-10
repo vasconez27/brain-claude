@@ -25,6 +25,24 @@ type CrewPick = { rosterId: string; name: string; cc: boolean };
 type Item = { id: string; name: string; price: number };
 type LaborLine = { id: number; label: string; qty: number; regHours: number; otHours: number; rate: number };
 type ItemLine = { id: number; name: string; qty: number; price: number };
+// A saved invoice record — lives in billing.invoices (manager-only data).
+type InvoiceRec = {
+  id: string; no: string; client: string; clientAddress: string; jobRef: string;
+  date: string; terms: string; taxPct: number; notes: string;
+  laborLines: LaborLine[]; itemLines: ItemLine[];
+  subtotal: number; tax: number; total: number;
+  status: "sent" | "paid" | "void";
+  createdAt: string; paidAt?: string; paidBy?: string; receiptNo?: string;
+};
+
+const TERM_DAYS: Record<string, number> = { "Due on receipt": 0, "Net 15": 15, "Net 30": 30, "Net 45": 45 };
+function dueInfo(inv: InvoiceRec): { overdue: boolean; daysOver: number } {
+  if (inv.status !== "sent") return { overdue: false, daysOver: 0 };
+  const days = TERM_DAYS[inv.terms] ?? 30;
+  const due = new Date(inv.createdAt).getTime() + days * 86400000;
+  const over = Date.now() - due;
+  return { overdue: over > 0, daysOver: Math.floor(over / 86400000) };
+}
 
 const CC_PREMIUM = 4; // dollars/hr on top of the person's own rate
 
@@ -122,7 +140,7 @@ export default function InvoicePage() {
   const [client, setClient] = useState("");
   const [clientAddress, setClientAddress] = useState("");
   const [jobRef, setJobRef] = useState("");
-  const [invoiceNo, setInvoiceNo] = useState(invNumber());
+  const [invoiceNo, setInvoiceNo] = useState(""); // assigned from the central counter at Generate
   const [invoiceDate, setInvoiceDate] = useState(today());
   const [terms, setTerms] = useState("Net 30");
   const [taxPct, setTaxPct] = useState("0");
@@ -144,6 +162,13 @@ export default function InvoicePage() {
   // rates drawer + item form
   const [showRates, setShowRates] = useState(false);
   const [newItem, setNewItem] = useState({ name: "", price: "" });
+
+  // dashboard
+  const [tab, setTab] = useState<"new" | "dash">("new");
+  const [me, setMe] = useState("Manager");
+  useEffect(() => {
+    fetch("/api/auth/session").then(r => r.json()).then(j => { if (j?.user?.name) setMe(j.user.name); }).catch(() => {});
+  }, []);
 
   // ── actions ──
   function runPaste() {
@@ -200,18 +225,8 @@ export default function InvoicePage() {
   const tax = subtotal * (nnum(taxPct) / 100);
   const total = subtotal + tax;
 
-  // ── print (real logo, rolled-up lines only) ──
-  function printInvoice() {
-    const laborRows = laborLines.map(l => `
-      <tr><td>${l.label}${l.otHours > 0 ? `<div class="sub">${l.regHours} reg + ${l.otHours} OT hrs each (OT @ 1.5×)</div>` : ""}</td>
-      <td class="c">${l.qty}</td><td class="c">${l.regHours + l.otHours}</td>
-      <td class="r">${money(l.rate)}/hr</td><td class="r">${money(lineAmount(l))}</td></tr>`).join("");
-    const itemRows = itemLines.map(l => `
-      <tr><td>${l.name.replace(/[<>]/g, "")}</td><td class="c">${l.qty}</td><td class="c">—</td>
-      <td class="r">${money(l.price)}</td><td class="r">${money(l.qty * l.price)}</td></tr>`).join("");
-
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${invoiceNo}</title>
-    <style>
+  // ── documents (record-based, so the dashboard can reprint any invoice) ──
+  const DOC_CSS = `
       @page { margin: 0.7in; }
       body { font-family: -apple-system,'Helvetica Neue',Arial,sans-serif; color:#111; font-size:11pt; line-height:1.5; }
       .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:24pt; }
@@ -234,31 +249,126 @@ export default function InvoicePage() {
       .totals div { display:flex; justify-content:space-between; padding:4pt 9pt; }
       .totals .grand { border-top:2px solid #111; font-size:13pt; font-weight:800; padding-top:7pt; margin-top:3pt; }
       .notes { margin-top:24pt; font-size:9.5pt; color:#555; border-top:1px solid #ddd; padding-top:10pt; white-space:pre-line; }
-    </style></head><body>
+      .paidstamp { display:inline-block; border:3pt solid #0a8f5b; color:#0a8f5b; font-weight:800; font-size:16pt; letter-spacing:0.2em; padding:4pt 14pt; transform:rotate(-6deg); margin-bottom:10pt; }
+      .rctbox { background:#f0faf5; border:1px solid #0a8f5b; border-radius:6pt; padding:10pt 12pt; margin-bottom:14pt; font-size:10pt; }`;
+
+  function openDoc(title: string, body: string) {
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><style>${DOC_CSS}</style></head><body>${body}<script>window.onload=()=>setTimeout(()=>window.print(),150)</script></body></html>`;
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+  }
+
+  const brandTop = (no: string, right: string) => `
       <div class="top">
         <div class="brand">
           <img src="${location.origin}/bigcrew-logo-circle.webp" alt="">
           <div class="nm">BIG CREW NYC<small>CREW &amp; LABOR SERVICES</small></div>
         </div>
-        <div class="invmeta"><div class="no">${invoiceNo}</div><div>Date: ${invoiceDate}</div><div>Terms: ${terms}</div></div>
-      </div>
-      <h1>INVOICE</h1>
-      ${jobRef.trim() ? `<div class="ref">Re: ${jobRef.replace(/[<>]/g, "")}</div>` : ""}
-      <div class="party"><div class="label">Bill To</div><div><b>${client.replace(/[<>]/g, "")}</b>\n${clientAddress.replace(/[<>]/g, "")}</div></div>
-      <table>
+        <div class="invmeta"><div class="no">${no}</div>${right}</div>
+      </div>`;
+
+  function linesTable(rec: InvoiceRec) {
+    const laborRows = rec.laborLines.map(l => `
+      <tr><td>${l.label}${l.otHours > 0 ? `<div class="sub">${l.regHours} reg + ${l.otHours} OT hrs each (OT @ 1.5×)</div>` : ""}</td>
+      <td class="c">${l.qty}</td><td class="c">${l.regHours + l.otHours}</td>
+      <td class="r">${money(l.rate)}/hr</td><td class="r">${money(lineAmount(l))}</td></tr>`).join("");
+    const itemRows = rec.itemLines.map(l => `
+      <tr><td>${l.name.replace(/[<>]/g, "")}</td><td class="c">${l.qty}</td><td class="c">—</td>
+      <td class="r">${money(l.price)}</td><td class="r">${money(l.qty * l.price)}</td></tr>`).join("");
+    return `<table>
         <thead><tr><th>Description</th><th class="c">Qty</th><th class="c">Hrs Each</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead>
         <tbody>${laborRows}${itemRows}</tbody>
-      </table>
+      </table>`;
+  }
+
+  function printInvoiceDoc(rec: InvoiceRec) {
+    openDoc(rec.no, `
+      ${brandTop(rec.no, `<div>Date: ${rec.date}</div><div>Terms: ${rec.terms}</div>`)}
+      <h1>INVOICE</h1>
+      ${rec.jobRef.trim() ? `<div class="ref">Re: ${rec.jobRef.replace(/[<>]/g, "")}</div>` : ""}
+      <div class="party"><div class="label">Bill To</div><div><b>${rec.client.replace(/[<>]/g, "")}</b>\n${rec.clientAddress.replace(/[<>]/g, "")}</div></div>
+      ${linesTable(rec)}
       <div class="totals">
-        <div><span>Subtotal</span><span>${money(subtotal)}</span></div>
-        ${nnum(taxPct) > 0 ? `<div><span>Tax (${taxPct}%)</span><span>${money(tax)}</span></div>` : ""}
-        <div class="grand"><span>TOTAL DUE</span><span>${money(total)}</span></div>
+        <div><span>Subtotal</span><span>${money(rec.subtotal)}</span></div>
+        ${rec.taxPct > 0 ? `<div><span>Tax (${rec.taxPct}%)</span><span>${money(rec.tax)}</span></div>` : ""}
+        <div class="grand"><span>TOTAL DUE</span><span>${money(rec.total)}</span></div>
       </div>
-      ${notes.trim() ? `<div class="notes">${notes.replace(/[<>]/g, "")}</div>` : ""}
-      <script>window.onload=()=>setTimeout(()=>window.print(),150)</script>
-    </body></html>`;
-    const w = window.open("", "_blank");
-    if (w) { w.document.write(html); w.document.close(); }
+      ${rec.notes.trim() ? `<div class="notes">${rec.notes.replace(/[<>]/g, "")}</div>` : ""}`);
+  }
+
+  // The RECEIPT is a distinct document: its own number, PAID stamp, payment
+  // details, references the invoice it settles.
+  function printReceiptDoc(rec: InvoiceRec) {
+    const paidDate = rec.paidAt ? new Date(rec.paidAt).toLocaleDateString("en-US") : today();
+    openDoc(rec.receiptNo || "RECEIPT", `
+      ${brandTop(rec.receiptNo || "RECEIPT", `<div>Date: ${paidDate}</div>`)}
+      <h1>RECEIPT</h1>
+      <div class="paidstamp">PAID</div>
+      <div class="rctbox">
+        Payment received in full for invoice <b>${rec.no}</b> · ${rec.date}
+        <br>Amount received: <b>${money(rec.total)}</b> · Received on ${paidDate}
+      </div>
+      <div class="party"><div class="label">Received From</div><div><b>${rec.client.replace(/[<>]/g, "")}</b>\n${rec.clientAddress.replace(/[<>]/g, "")}</div></div>
+      ${linesTable(rec)}
+      <div class="totals">
+        <div class="grand"><span>AMOUNT PAID</span><span>${money(rec.total)}</span></div>
+      </div>
+      <div class="notes">Thank you for your business. This receipt confirms payment in full — no balance remains on invoice ${rec.no}.</div>`);
+  }
+
+  // ── generate: assign a sequential number, SAVE the record, then print ──
+  async function generateInvoice() {
+    try {
+      const cur = await fetch("/api/workspace", { cache: "no-store" }).then(r => r.json());
+      const freshBilling: Rec = { defaultRate: 38, rates: {}, items: [], invoices: [], nextInvoiceNo: 1001, nextReceiptNo: 1001, ...(cur?.data?.billing || {}) };
+      const no = `INV-${freshBilling.nextInvoiceNo}`;
+      const rec: InvoiceRec = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        no, client, clientAddress, jobRef, date: invoiceDate, terms,
+        taxPct: nnum(taxPct), notes, laborLines, itemLines,
+        subtotal, tax, total, status: "sent", createdAt: new Date().toISOString(),
+      };
+      const nextB = { ...freshBilling, invoices: [rec, ...(freshBilling.invoices || [])], nextInvoiceNo: freshBilling.nextInvoiceNo + 1 };
+      const data = { ...(cur?.data || {}), billing: nextB };
+      delete data.managerContacts;
+      await fetch("/api/workspace", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+      setBilling(nextB);
+      setInvoiceNo(no);
+      printInvoiceDoc(rec);
+      setSaveMsg(`✓ ${no} saved`); setTimeout(() => setSaveMsg(""), 2500);
+    } catch { setSaveMsg("save failed — check connection"); }
+  }
+
+  // ── dashboard actions ──
+  async function updateInvoice(id: string, patch: Partial<InvoiceRec>, assignReceipt = false) {
+    try {
+      const cur = await fetch("/api/workspace", { cache: "no-store" }).then(r => r.json());
+      const freshBilling: Rec = { invoices: [], nextReceiptNo: 1001, ...(cur?.data?.billing || {}) };
+      let receiptBump = 0;
+      const invoices = (freshBilling.invoices || []).map((v: InvoiceRec) => {
+        if (v.id !== id) return v;
+        const upd = { ...v, ...patch };
+        if (assignReceipt && !v.receiptNo) { upd.receiptNo = `RCT-${freshBilling.nextReceiptNo}`; receiptBump = 1; }
+        return upd;
+      });
+      const nextB = { ...freshBilling, invoices, nextReceiptNo: (freshBilling.nextReceiptNo || 1001) + receiptBump };
+      const data = { ...(cur?.data || {}), billing: nextB };
+      delete data.managerContacts;
+      await fetch("/api/workspace", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+      setBilling(nextB);
+      return invoices.find((v: InvoiceRec) => v.id === id) || null;
+    } catch { setSaveMsg("save failed"); return null; }
+  }
+
+  async function confirmPaid(inv: InvoiceRec) {
+    if (!confirm(`Confirm payment received for ${inv.no} — ${money(inv.total)} from ${inv.client}?`)) return;
+    const updated = await updateInvoice(inv.id, { status: "paid", paidAt: new Date().toISOString(), paidBy: me }, true);
+    if (updated) printReceiptDoc(updated);
+  }
+
+  async function voidInvoice(inv: InvoiceRec) {
+    if (!confirm(`Void ${inv.no}? It stays on record as VOID.`)) return;
+    await updateInvoice(inv.id, { status: "void" });
   }
 
   // ── styles (theme-driven) ──
@@ -301,6 +411,9 @@ export default function InvoicePage() {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {saveMsg && <span style={{ fontSize: 10, color: saveMsg.startsWith("✓") ? "#0a8f5b" : "#c33" }}>{saveMsg}</span>}
+          <button onClick={() => setTab(t => t === "dash" ? "new" : "dash")} style={{ ...goldBtn, background: tab === "dash" ? "#111" : "#E8C84A", color: tab === "dash" ? "#fff" : "#1a1400" }}>
+            {tab === "dash" ? "🧾 NEW INVOICE" : `📊 DASHBOARD${(billing.invoices||[]).length ? ` (${(billing.invoices||[]).length})` : ""}`}
+          </button>
           <button onClick={() => setShowRates(v => !v)} style={{ ...goldBtn, background: showRates ? "#111" : "#E8C84A", color: showRates ? "#fff" : "#1a1400" }}>⚙ RATES</button>
           <a href="/manager/dashboard" style={{ fontSize: 11, color: T.muted, textDecoration: "none", border: `1px solid ${T.cardBorder}`, borderRadius: 7, padding: "8px 12px", background: T.cardBg }}>← APP</a>
         </div>
@@ -365,6 +478,61 @@ export default function InvoicePage() {
           </div>
         )}
 
+        {/* ── DASHBOARD TAB — every invoice, status, actions ── */}
+        {tab === "dash" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {(billing.invoices || []).length === 0 && (
+              <div style={{ ...cardS, textAlign: "center", color: T.faint, fontSize: 13, padding: "34px 14px" }}>
+                No invoices yet — generate your first from the NEW INVOICE tab and it will appear here.
+              </div>
+            )}
+            {(billing.invoices || []).map((inv: InvoiceRec) => {
+              const due = dueInfo(inv);
+              const chip = inv.status === "paid"
+                ? { t: "PAID", bg: "#0a8f5b", fg: "#fff" }
+                : inv.status === "void"
+                ? { t: "VOID", bg: T.faint, fg: "#fff" }
+                : due.overdue
+                ? { t: `OVERDUE ${due.daysOver}d`, bg: "#d83a3a", fg: "#fff" }
+                : { t: "SENT", bg: "#E8C84A", fg: "#1a1400" };
+              return (
+                <div key={inv.id} style={{ ...cardS, opacity: inv.status === "void" ? 0.55 : 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>{inv.no} · {inv.client || "—"}</div>
+                      <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+                        {inv.date} · {inv.terms}{inv.jobRef ? ` · ${inv.jobRef}` : ""}
+                      </div>
+                      {inv.status === "paid" && (
+                        <div style={{ fontSize: 10, color: "#0a8f5b", marginTop: 3 }}>
+                          ✓ Confirmed by {inv.paidBy || "manager"} · {inv.paidAt ? new Date(inv.paidAt).toLocaleDateString("en-US") : ""}{inv.receiptNo ? ` · ${inv.receiptNo}` : ""}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 17, fontWeight: 800 }}>{money(inv.total)}</div>
+                      <span style={{ display: "inline-block", marginTop: 4, background: chip.bg, color: chip.fg, borderRadius: 5, padding: "3px 9px", fontSize: 9, fontWeight: 800, letterSpacing: "0.08em" }}>{chip.t}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                    {inv.status === "sent" && (
+                      <button onClick={() => confirmPaid(inv)} style={{ background: "#0a8f5b", color: "#fff", border: "none", borderRadius: 7, padding: "8px 13px", fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>✓ CONFIRM RECEIVED</button>
+                    )}
+                    {inv.status === "paid" && (
+                      <button onClick={() => printReceiptDoc(inv)} style={{ background: "#0a8f5b", color: "#fff", border: "none", borderRadius: 7, padding: "8px 13px", fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>📄 RECEIPT</button>
+                    )}
+                    <button onClick={() => printInvoiceDoc(inv)} style={{ background: "transparent", border: `1px solid ${T.inputBorder}`, color: T.muted, borderRadius: 7, padding: "8px 13px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>🧾 INVOICE PDF</button>
+                    {inv.status === "sent" && (
+                      <button onClick={() => voidInvoice(inv)} style={{ background: "transparent", border: "1px solid #e5b0b0", color: "#c33", borderRadius: 7, padding: "8px 13px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>VOID</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {tab === "new" && (
         <div className="inv-grid">
           {/* ── LEFT: BUILD ── */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -555,16 +723,17 @@ export default function InvoicePage() {
               </div>
             </div>
 
-            <button onClick={printInvoice} disabled={subtotal <= 0}
+            <button onClick={generateInvoice} disabled={subtotal <= 0}
               style={{ background: subtotal > 0 ? "#0a8f5b" : "#bbb", color: "#fff", border: "none", borderRadius: 9, padding: 16, fontWeight: 800, fontSize: 14, letterSpacing: "0.08em", cursor: subtotal > 0 ? "pointer" : "default", fontFamily: "inherit" }}>
               🧾 GENERATE INVOICE (PRINT / SAVE PDF)
             </button>
             <div style={{ fontSize: 10, color: T.faint, textAlign: "center", lineHeight: 1.5 }}>
-              Logo letterhead · rolled-up lines · use the browser&apos;s &quot;Save as PDF&quot; to email it.
+              Logo letterhead · rolled-up lines · saved to the dashboard on generate · use the browser&apos;s &quot;Save as PDF&quot; to email it.
               {!loaded && " · loading roster…"}
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
