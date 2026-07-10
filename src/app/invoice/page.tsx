@@ -1,6 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
+
+// Light/dark palettes for the tool chrome. The invoice PREVIEW and PRINT stay
+// white paper on purpose — that's the document the client receives.
+const PALETTE = {
+  light: { pageBg: "#f2f2f2", cardBg: "#fafafa", cardBorder: "#e4e4e4", inputBg: "#fff", inputBorder: "#d0d0d0", text: "#111", muted: "#666", faint: "#999", headerBg: "#fff", rowBg: "#fff", rowBorder: "#e0e0e0" },
+  dark: { pageBg: "#0c0c0d", cardBg: "#151517", cardBorder: "#2c2c30", inputBg: "#1a1a1d", inputBorder: "#3c3c42", text: "#ededed", muted: "#9a9a9a", faint: "#6a6a6a", headerBg: "#151517", rowBg: "#1d1d20", rowBorder: "#2c2c30" },
+};
 
 // ─── BIG CREW INVOICING ──────────────────────────────────────────────────────
 // Standalone billing tool. Reads the roster + billing config from the shared
@@ -71,6 +79,12 @@ function parseRequest(text: string): { count: number; startH: number; endH: numb
 const lineAmount = (l: LaborLine) => l.qty * (l.regHours * l.rate + l.otHours * l.rate * 1.5);
 
 export default function InvoicePage() {
+  // ── theme (light/dark, gated on mount to avoid hydration mismatch) ──
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const T = PALETTE[mounted && resolvedTheme === "dark" ? "dark" : "light"];
+
   // ── load workspace: roster + billing config ──
   const [loaded, setLoaded] = useState(false);
   const [splash, setSplash] = useState(true);
@@ -247,11 +261,12 @@ export default function InvoicePage() {
     if (w) { w.document.write(html); w.document.close(); }
   }
 
-  // ── styles ──
-  const inp: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 14, borderRadius: 7, border: "2px solid #d0d0d0", background: "#fff", color: "#111", fontFamily: "'DM Mono','Courier New',monospace", outline: "none", boxSizing: "border-box" };
-  const lbl: React.CSSProperties = { display: "block", fontSize: 10, letterSpacing: "0.18em", color: "#999", textTransform: "uppercase", fontWeight: 700, marginBottom: 4 };
-  const cardS: React.CSSProperties = { background: "#fafafa", border: "2px solid #e4e4e4", borderRadius: 10, padding: 14 };
+  // ── styles (theme-driven) ──
+  const inp: React.CSSProperties = { width: "100%", padding: "10px 12px", fontSize: 14, borderRadius: 7, border: `2px solid ${T.inputBorder}`, background: T.inputBg, color: T.text, fontFamily: "'DM Mono','Courier New',monospace", outline: "none", boxSizing: "border-box" };
+  const lbl: React.CSSProperties = { display: "block", fontSize: 10, letterSpacing: "0.18em", color: T.faint, textTransform: "uppercase", fontWeight: 700, marginBottom: 4 };
+  const cardS: React.CSSProperties = { background: T.cardBg, border: `2px solid ${T.cardBorder}`, borderRadius: 10, padding: 14 };
   const goldBtn: React.CSSProperties = { background: "#E8C84A", color: "#1a1400", border: "none", borderRadius: 7, padding: "9px 14px", fontWeight: 700, fontSize: 11, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em" };
+  const rowS: React.CSSProperties = { background: T.rowBg, border: `1px solid ${T.rowBorder}`, borderRadius: 7 };
 
   const filteredRoster = roster.filter(r =>
     !picks.find(p => p.rosterId === r.id) &&
@@ -259,7 +274,7 @@ export default function InvoicePage() {
   ).slice(0, 6);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f2f2f2", color: "#111", fontFamily: "'DM Mono','Courier New',monospace", paddingBottom: 60 }}>
+    <div style={{ minHeight: "100vh", background: T.pageBg, color: T.text, fontFamily: "'DM Mono','Courier New',monospace", paddingBottom: 60 }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap');
         @media (min-width: 980px) { .inv-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; } }
@@ -275,19 +290,19 @@ export default function InvoicePage() {
       )}
 
       {/* Header */}
-      <div style={{ background: "#fff", borderBottom: "2px solid #E8C84A", padding: "12px 16px", position: "sticky", top: 0, zIndex: 50, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ background: T.headerBg, borderBottom: "2px solid #E8C84A", padding: "12px 16px", position: "sticky", top: 0, zIndex: 50, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/bigcrew-logo-circle.webp" alt="" style={{ width: 38, height: 38, objectFit: "contain" }} />
           <div>
             <div style={{ fontFamily: "'Bebas Neue','Arial Black',sans-serif", fontSize: 22, letterSpacing: "0.1em" }}>BIG CREW INVOICING</div>
-            <div style={{ fontSize: 9, color: "#888", letterSpacing: "0.2em" }}>BILLING · MANAGEMENT ONLY</div>
+            <div style={{ fontSize: 9, color: T.faint, letterSpacing: "0.2em" }}>BILLING · MANAGEMENT ONLY</div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {saveMsg && <span style={{ fontSize: 10, color: saveMsg.startsWith("✓") ? "#0a8f5b" : "#c33" }}>{saveMsg}</span>}
           <button onClick={() => setShowRates(v => !v)} style={{ ...goldBtn, background: showRates ? "#111" : "#E8C84A", color: showRates ? "#fff" : "#1a1400" }}>⚙ RATES</button>
-          <a href="/manager/dashboard" style={{ fontSize: 11, color: "#666", textDecoration: "none", border: "1px solid #ddd", borderRadius: 7, padding: "8px 12px", background: "#fafafa" }}>← APP</a>
+          <a href="/manager/dashboard" style={{ fontSize: 11, color: T.muted, textDecoration: "none", border: `1px solid ${T.cardBorder}`, borderRadius: 7, padding: "8px 12px", background: T.cardBg }}>← APP</a>
         </div>
       </div>
 
@@ -295,7 +310,7 @@ export default function InvoicePage() {
 
         {/* ── RATES & CATALOG DRAWER ── */}
         {showRates && (
-          <div style={{ ...cardS, border: "2px solid #111", marginBottom: 14 }}>
+          <div style={{ ...cardS, border: `2px solid ${T.inputBorder}`, marginBottom: 14 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <div>
                 <span style={lbl}>Default bill rate ($/hr) · CC always bills +${CC_PREMIUM}</span>
@@ -307,10 +322,10 @@ export default function InvoicePage() {
                   <span style={lbl}>Per-person rates (blank = default) — internal only, never shown to crew or client</span>
                   <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
                     {roster.map(r => (
-                      <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 7, padding: "7px 10px" }}>
+                      <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: T.rowBg, border: `1px solid ${T.rowBorder}`, borderRadius: 7, padding: "7px 10px" }}>
                         <span style={{ fontSize: 12, fontWeight: 700 }}>{r.name}</span>
                         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                          <span style={{ fontSize: 11, color: "#999" }}>$</span>
+                          <span style={{ fontSize: 11, color: T.faint }}>$</span>
                           <input inputMode="decimal" placeholder={String(nnum(billing.defaultRate, 38))}
                             value={billing.rates?.[r.id] ?? ""}
                             onChange={e => setBilling((b: Rec) => ({ ...b, rates: { ...(b.rates || {}), [r.id]: e.target.value } }))}
@@ -321,7 +336,7 @@ export default function InvoicePage() {
                               saveBilling({ ...billing, rates });
                             }}
                             style={{ ...inp, width: 74, textAlign: "center", padding: "6px 8px" }} />
-                          <span style={{ fontSize: 10, color: "#999" }}>/hr</span>
+                          <span style={{ fontSize: 10, color: T.faint }}>/hr</span>
                         </div>
                       </div>
                     ))}
@@ -337,13 +352,13 @@ export default function InvoicePage() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 240, overflowY: "auto" }}>
                   {(billing.items || []).map((it: Item) => (
-                    <div key={it.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 7, padding: "7px 10px" }}>
+                    <div key={it.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: T.rowBg, border: `1px solid ${T.rowBorder}`, borderRadius: 7, padding: "7px 10px" }}>
                       <span style={{ fontSize: 12 }}>{it.name} — <b>{money(it.price)}</b></span>
                       <button onClick={() => saveBilling({ ...billing, items: (billing.items || []).filter((x: Item) => x.id !== it.id) })}
                         style={{ background: "transparent", border: "1px solid #e5b0b0", color: "#c33", borderRadius: 6, padding: "3px 8px", cursor: "pointer", fontFamily: "inherit", fontSize: 10 }}>✕</button>
                     </div>
                   ))}
-                  {(billing.items || []).length === 0 && <div style={{ fontSize: 11, color: "#999" }}>No items saved yet — add your first above.</div>}
+                  {(billing.items || []).length === 0 && <div style={{ fontSize: 11, color: T.faint }}>No items saved yet — add your first above.</div>}
                 </div>
               </div>
             </div>
@@ -378,8 +393,8 @@ export default function InvoicePage() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
                   {filteredRoster.map(r => (
                     <button key={r.id} onClick={() => { setPicks(p => [...p, { rosterId: r.id, name: r.name, cc: false }]); setCrewSearch(""); }}
-                      style={{ background: "#fff", border: "1px solid #ccc", borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>
-                      + {r.name} <span style={{ color: "#999", fontSize: 10 }}>({money(rateFor(r.id))}/hr)</span>
+                      style={{ background: T.rowBg, border: `1px solid ${T.inputBorder}`, borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>
+                      + {r.name} <span style={{ color: T.faint, fontSize: 10 }}>({money(rateFor(r.id))}/hr)</span>
                     </button>
                   ))}
                 </div>
@@ -388,8 +403,8 @@ export default function InvoicePage() {
                 <>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
                     {picks.map((p, i) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 7, padding: "7px 10px" }}>
-                        <span style={{ fontSize: 12, fontWeight: 700 }}>{p.name} <span style={{ color: "#999", fontWeight: 400 }}>{money(rateFor(p.rosterId) + (p.cc ? CC_PREMIUM : 0))}/hr</span></span>
+                      <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: T.rowBg, border: `1px solid ${T.rowBorder}`, borderRadius: 7, padding: "7px 10px" }}>
+                        <span style={{ fontSize: 12, fontWeight: 700 }}>{p.name} <span style={{ color: T.faint, fontWeight: 400 }}>{money(rateFor(p.rosterId) + (p.cc ? CC_PREMIUM : 0))}/hr</span></span>
                         <div style={{ display: "flex", gap: 6 }}>
                           <button onClick={() => setPicks(ps => ps.map((x, j) => j === i ? { ...x, cc: !x.cc } : x))}
                             style={{ background: p.cc ? "#E8C84A" : "transparent", border: "1px solid #E8C84A", color: p.cc ? "#1a1400" : "#a08a20", borderRadius: 6, padding: "3px 9px", cursor: "pointer", fontFamily: "inherit", fontSize: 10, fontWeight: 700 }}>CC</button>
@@ -411,7 +426,7 @@ export default function InvoicePage() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {(billing.items || []).map((it: Item) => (
                     <button key={it.id} onClick={() => addCatalogItem(it)}
-                      style={{ background: "#fff", border: "1px solid #ccc", borderRadius: 7, padding: "8px 12px", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>
+                      style={{ background: T.rowBg, border: `1px solid ${T.inputBorder}`, borderRadius: 7, padding: "8px 12px", cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}>
                       + {it.name} <b>{money(it.price)}</b>
                     </button>
                   ))}
@@ -446,14 +461,14 @@ export default function InvoicePage() {
             <div style={{ ...cardS, border: "2px solid #E8C84A" }}>
               <span style={lbl}>Invoice lines (rolled up — no crew names)</span>
               {laborLines.length === 0 && itemLines.length === 0 && (
-                <div style={{ fontSize: 12, color: "#999", padding: "14px 0" }}>Nothing yet — paste a request, pick crew, or tap an item.</div>
+                <div style={{ fontSize: 12, color: T.faint, padding: "14px 0" }}>Nothing yet — paste a request, pick crew, or tap an item.</div>
               )}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {laborLines.map(l => (
-                  <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 7, padding: "8px 10px" }}>
+                  <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: T.rowBg, border: `1px solid ${T.rowBorder}`, borderRadius: 7, padding: "8px 10px" }}>
                     <div style={{ fontSize: 12 }}>
                       <b>{l.label}</b> — {l.qty} crew × {l.regHours + l.otHours}h @ {money(l.rate)}/hr
-                      {l.otHours > 0 && <div style={{ fontSize: 10, color: "#888" }}>{l.regHours} reg + {l.otHours} OT @1.5×</div>}
+                      {l.otHours > 0 && <div style={{ fontSize: 10, color: T.faint }}>{l.regHours} reg + {l.otHours} OT @1.5×</div>}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <b style={{ fontSize: 13 }}>{money(lineAmount(l))}</b>
@@ -462,7 +477,7 @@ export default function InvoicePage() {
                   </div>
                 ))}
                 {itemLines.map(l => (
-                  <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 7, padding: "8px 10px" }}>
+                  <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: T.rowBg, border: `1px solid ${T.rowBorder}`, borderRadius: 7, padding: "8px 10px" }}>
                     <div style={{ fontSize: 12 }}><b>{l.name}</b> × {l.qty}</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <b style={{ fontSize: 13 }}>{money(l.qty * l.price)}</b>
@@ -478,11 +493,73 @@ export default function InvoicePage() {
               </div>
             </div>
 
+            {/* ── LIVE PREVIEW — white paper, exactly what prints (rolled up) ── */}
+            <div style={{ ...cardS, border: "2px solid #E8C84A" }}>
+              <span style={lbl}>Live preview — what the client receives</span>
+              <div style={{ background: "#fff", color: "#111", border: "1px solid #ddd", borderRadius: 8, padding: 18, fontFamily: "-apple-system,'Helvetica Neue',Arial,sans-serif" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/bigcrew-logo-circle.webp" alt="" style={{ width: 40, height: 40, objectFit: "contain" }} />
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: "0.04em" }}>BIG CREW NYC</div>
+                      <div style={{ fontSize: 7, letterSpacing: "0.22em", color: "#888" }}>CREW &amp; LABOR SERVICES</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", fontSize: 11 }}>
+                    <div style={{ fontWeight: 700 }}>{invoiceNo}</div>
+                    <div style={{ color: "#555" }}>{invoiceDate} · {terms}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 13, letterSpacing: "0.14em", fontWeight: 700, marginBottom: 6 }}>INVOICE</div>
+                {jobRef.trim() && <div style={{ fontSize: 11, color: "#666", marginBottom: 10 }}>Re: {jobRef}</div>}
+                <div style={{ fontSize: 8, color: "#888", letterSpacing: "0.15em", marginBottom: 2 }}>BILL TO</div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{client || <span style={{ color: "#bbb", fontWeight: 400 }}>Client name…</span>}</div>
+                <div style={{ fontSize: 11, whiteSpace: "pre-line", color: "#444", marginBottom: 12 }}>{clientAddress}</div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                  <thead><tr style={{ background: "#111", color: "#fff" }}>
+                    <th style={{ textAlign: "left", padding: "5px 7px", fontWeight: 600 }}>Description</th>
+                    <th style={{ padding: "5px 4px" }}>Qty</th>
+                    <th style={{ padding: "5px 4px" }}>Hrs</th>
+                    <th style={{ textAlign: "right", padding: "5px 7px" }}>Amount</th>
+                  </tr></thead>
+                  <tbody>
+                    {laborLines.map(l => (
+                      <tr key={l.id} style={{ borderBottom: "1px solid #eee" }}>
+                        <td style={{ padding: "6px 7px" }}>{l.label}{l.otHours > 0 && <div style={{ fontSize: 9, color: "#888" }}>{l.regHours} reg + {l.otHours} OT @1.5×</div>}</td>
+                        <td style={{ textAlign: "center" }}>{l.qty}</td>
+                        <td style={{ textAlign: "center" }}>{l.regHours + l.otHours}</td>
+                        <td style={{ textAlign: "right", padding: "6px 7px" }}>{money(lineAmount(l))}</td>
+                      </tr>
+                    ))}
+                    {itemLines.map(l => (
+                      <tr key={l.id} style={{ borderBottom: "1px solid #eee" }}>
+                        <td style={{ padding: "6px 7px" }}>{l.name}</td>
+                        <td style={{ textAlign: "center" }}>{l.qty}</td>
+                        <td style={{ textAlign: "center" }}>—</td>
+                        <td style={{ textAlign: "right", padding: "6px 7px" }}>{money(l.qty * l.price)}</td>
+                      </tr>
+                    ))}
+                    {laborLines.length === 0 && itemLines.length === 0 && (
+                      <tr><td colSpan={4} style={{ padding: "14px 7px", color: "#bbb", textAlign: "center" }}>No lines yet</td></tr>
+                    )}
+                  </tbody>
+                </table>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                  <div style={{ minWidth: 170, fontSize: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}><span>Subtotal</span><span>{money(subtotal)}</span></div>
+                    {nnum(taxPct) > 0 && <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}><span>Tax ({taxPct}%)</span><span>{money(tax)}</span></div>}
+                    <div style={{ display: "flex", justifyContent: "space-between", borderTop: "2px solid #111", marginTop: 4, paddingTop: 5, fontWeight: 800, fontSize: 14 }}><span>TOTAL DUE</span><span>{money(total)}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <button onClick={printInvoice} disabled={subtotal <= 0}
               style={{ background: subtotal > 0 ? "#0a8f5b" : "#bbb", color: "#fff", border: "none", borderRadius: 9, padding: 16, fontWeight: 800, fontSize: 14, letterSpacing: "0.08em", cursor: subtotal > 0 ? "pointer" : "default", fontFamily: "inherit" }}>
               🧾 GENERATE INVOICE (PRINT / SAVE PDF)
             </button>
-            <div style={{ fontSize: 10, color: "#999", textAlign: "center", lineHeight: 1.5 }}>
+            <div style={{ fontSize: 10, color: T.faint, textAlign: "center", lineHeight: 1.5 }}>
               Logo letterhead · rolled-up lines · use the browser&apos;s &quot;Save as PDF&quot; to email it.
               {!loaded && " · loading roster…"}
             </div>
