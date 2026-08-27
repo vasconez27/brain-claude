@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CrewBrain
 
-## Getting Started
+Workforce management web app for crews of 1099 independent contractors.
+Managers post shifts, assign crew, manage the roster, and send mass SMS.
+Crew view their schedule, confirm/decline shifts, track hours, and calculate
+1099 taxes.
 
-First, run the development server:
+Built with Next.js 16 (App Router), TypeScript, Prisma + PostgreSQL,
+NextAuth, Tailwind, and FullCalendar.
+
+## Quick start (local)
+
+You need **Node.js 20+** and **Docker** (for the PostgreSQL database).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+./scripts/dev-setup.sh   # installs deps, creates .env, starts Postgres, syncs schema
+npm run dev              # starts the app
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open **http://localhost:3000** in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The database starts empty, so create an account first at
+**http://localhost:3000/register**:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Crew** account — no invite code needed.
+- **Manager** account — requires the invite code from `MANAGER_INVITE_CODE`
+  in your `.env` (default `let-me-in`).
 
-## Learn More
+### Manual setup
 
-To learn more about Next.js, take a look at the following resources:
+If you'd rather not use the script:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm install
+cp .env.example .env          # then edit values (generate a secret: openssl rand -base64 32)
+docker compose up -d db       # or point DATABASE_URL at your own Postgres
+npx prisma db push            # create the tables
+npm run dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Note for Claude Code on the web / remote sessions
+
+The dev server binds to `localhost:3000` **inside the remote container**, which
+your browser cannot reach directly. To view the app, run it on your own machine
+with the steps above, or deploy it. From inside a session, the app can still be
+driven and screenshotted programmatically.
+
+## Environment variables
+
+See [`.env.example`](.env.example). `DATABASE_URL` and `NEXTAUTH_SECRET` are
+required; Twilio and Google OAuth vars are optional and features degrade
+gracefully when they're unset.
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Set the environment variables from `.env.example` in your Vercel project and
+point `DATABASE_URL` at a hosted PostgreSQL instance. `npm run build` runs
+`prisma generate` and pushes the schema automatically.
