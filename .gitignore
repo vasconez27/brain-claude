@@ -42,3 +42,6 @@ next-env.d.ts
 
 /src/generated/prisma
 .gstack/
+
+# allow committing the example env
+!.env.example
